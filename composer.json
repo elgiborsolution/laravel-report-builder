@@ -1,5 +1,5 @@
 {
-    "name": "elgibor-solution/laravel-advanced-reports",
+    "name": "elgibor-solution/laravel-report-builder",
     "description": "A metadata-driven dynamic reporting engine for Laravel — definitions, sources, parameters, filters, grouping, aggregates, formulas, drilldowns, subreports, and HTML/PDF/Excel/CSV/JSON output.",
     "type": "library",
     "license": "MIT",

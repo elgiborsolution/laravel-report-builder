@@ -39,4 +39,19 @@ class ReportSourceController
 
         return response()->json($this->schema->forSource($source));
     }
+
+    /**
+     * Enhanced schema for the visual report designer.
+     *
+     * Returns all standard schema data plus field categories, compatible
+     * operators per field type, suggested aggregates, and available formats.
+     */
+    public function designerSchema(string $source): JsonResponse
+    {
+        if (! $this->sources->has($source)) {
+            return response()->json(['message' => "Source [{$source}] is not registered."], 404);
+        }
+
+        return response()->json($this->schema->forDesigner($source));
+    }
 }
