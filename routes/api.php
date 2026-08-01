@@ -21,7 +21,16 @@ Route::prefix($prefix)
 
         // Sources (read-only)
         Route::get('sources', 'ReportSourceController@index')->name('advanced-reports.sources.index');
+
+        // Dynamic data source bridge (static paths BEFORE wildcard {source})
+        Route::get('sources/dynamic', 'DataSourceBridgeController@listDynamic')->name('advanced-reports.sources.dynamic');
+        Route::get('sources/available', 'DataSourceBridgeController@listAvailable')->name('advanced-reports.sources.available');
+        Route::post('sources/connect', 'DataSourceBridgeController@connect')->name('advanced-reports.sources.connect');
+        Route::delete('sources/{key}/disconnect', 'DataSourceBridgeController@disconnect')->name('advanced-reports.sources.disconnect');
+
+        // Source schema (wildcard routes AFTER static paths)
         Route::get('sources/{source}/schema', 'ReportSourceController@schema')->name('advanced-reports.sources.schema');
+        Route::get('sources/{source}/designer-schema', 'ReportSourceController@designerSchema')->name('advanced-reports.sources.designer-schema');
 
         // Reports CRUD
         Route::get('reports', 'ReportController@index')->name('advanced-reports.reports.index');
@@ -30,6 +39,10 @@ Route::prefix($prefix)
         Route::put('reports/{report}', 'ReportController@update')->name('advanced-reports.reports.update');
         Route::patch('reports/{report}', 'ReportController@update');
         Route::delete('reports/{report}', 'ReportController@destroy')->name('advanced-reports.reports.destroy');
+
+        // Preview endpoints
+        Route::post('reports/preview-inline', 'ReportPreviewController@inlinePreview')->name('advanced-reports.reports.preview-inline');
+        Route::post('reports/{report}/preview', 'ReportPreviewController@preview')->name('advanced-reports.reports.preview');
 
         // Run / export endpoints
         Route::get('reports/{report}/runs', 'ReportRunController@index')->name('advanced-reports.runs.index');

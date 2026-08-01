@@ -60,6 +60,9 @@ final class AdvancedReportsServiceProvider extends ServiceProvider
         // Security
         $this->app->singleton(\ElgiborSolution\AdvancedReports\Security\FieldPermissionChecker::class);
 
+        // Bridge (dynamic data source integration)
+        $this->app->singleton(\ElgiborSolution\AdvancedReports\Bridge\DataSourceBridge::class);
+
         // Export manager
         $this->app->singleton(ExportManager::class);
     }
@@ -76,6 +79,9 @@ final class AdvancedReportsServiceProvider extends ServiceProvider
 
         $this->registerPolicies();
         $this->registerRoutes();
+
+        // Boot persisted dynamic data source connections into the registry.
+        $this->bootDynamicSources();
 
         if ($this->app->bound(HttpKernel::class)) {
             // hook reserved for future middleware (tenant resolution, etc.)
@@ -134,6 +140,22 @@ final class AdvancedReportsServiceProvider extends ServiceProvider
 
         if (($config['web']['enabled'] ?? false) && ($config['enabled'] ?? true)) {
             $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        }
+    }
+
+    /**
+     * Boot all persisted dynamic data source connections into the source registry.
+     * Wrapped in a try-catch to prevent migration failures from crashing the app.
+     */
+    protected function bootDynamicSources(): void
+    {
+        try {
+            /** @var \ElgiborSolution\AdvancedReports\Bridge\DataSourceBridge $bridge */
+            $bridge = $this->app->make(\ElgiborSolution\AdvancedReports\Bridge\DataSourceBridge::class);
+            $bridge->bootConnected();
+        } catch (\Throwable) {
+            // Silently ignore — table may not exist yet (pre-migration),
+            // or the data-sources package is not installed.
         }
     }
 }
