@@ -22,16 +22,17 @@
     ],
     "require": {
         "php": "^8.2",
-        "illuminate/contracts": "^10.0|^11.0|^12.0",
-        "illuminate/support": "^10.0|^11.0|^12.0",
-        "illuminate/database": "^10.0|^11.0|^12.0",
-        "illuminate/http": "^10.0|^11.0|^12.0",
+        "illuminate/contracts": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/database": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
         "symfony/expression-language": "^6.0|^7.0",
         "dragonmantank/cron-expression": "^3.0|^4.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^8.0|^9.0|^10.0",
-        "phpunit/phpunit": "^10.0|^11.0",
+        "orchestra/testbench": "^8.0|^9.0|^10.0|^11.0",
+        "phpunit/phpunit": "^10.0|^11.0|^12.0",
+        "pestphp/pest": "^3.8",
         "barryvdh/laravel-dompdf": "^2.0|^3.0",
         "maatwebsite/excel": "^3.1"
     },
@@ -61,10 +62,13 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/phpunit",
+        "test": "vendor/bin/pest",
         "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
     },
     "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
         "sort-packages": true
     },
     "minimum-stability": "stable",
