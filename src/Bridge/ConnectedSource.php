@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElgiborSolution\AdvancedReports\Bridge;
 
 use ElgiborSolution\AdvancedReports\Models\BaseModel;
+use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 use ESolution\DataSources\Models\DataSource;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -17,12 +18,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $data_source_id
  * @property string $source_key
  * @property ?int $tenant_id
- * @property ?int $created_by
+ * @property int|string|null $created_by
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  */
 class ConnectedSource extends BaseModel
 {
+    use ResolvesConfiguredUserModel;
+
     protected $table = 'advanced_report_connected_sources';
 
     protected $guarded = [];
@@ -30,7 +33,6 @@ class ConnectedSource extends BaseModel
     protected $casts = [
         'data_source_id' => 'integer',
         'tenant_id' => 'integer',
-        'created_by' => 'integer',
     ];
 
     /*
@@ -47,7 +49,7 @@ class ConnectedSource extends BaseModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(
-            config('auth.providers.users.model', \App\Models\User::class),
+            $this->configuredUserModel(),
             'created_by'
         );
     }

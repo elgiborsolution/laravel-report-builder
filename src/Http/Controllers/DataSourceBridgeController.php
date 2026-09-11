@@ -43,7 +43,7 @@ class DataSourceBridgeController
         $key = $this->bridge->connect(
             dataSourceId: $dataSourceId,
             tenantId: $request->input('tenant_id') ? (int) $request->input('tenant_id') : null,
-            userId: $request->user()?->getAuthIdentifier() ? (int) $request->user()->getAuthIdentifier() : null,
+            userId: $request->user()?->getAuthIdentifier(),
         );
 
         return response()->json([

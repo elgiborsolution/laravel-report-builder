@@ -6,13 +6,14 @@ namespace ElgiborSolution\AdvancedReports\Models;
 
 use ElgiborSolution\AdvancedReports\Models\Concerns\BelongsToTenant;
 use ElgiborSolution\AdvancedReports\Models\Concerns\HasUuid;
+use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property string $uuid
  * @property int $report_id
- * @property ?int $user_id
+ * @property int|string|null $user_id
  * @property ?array $parameters
  * @property string $status // pending|running|completed|failed
  * @property int $row_count
@@ -25,6 +26,7 @@ class ReportRun extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+    use ResolvesConfiguredUserModel;
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_RUNNING = 'running';
@@ -48,7 +50,7 @@ class ReportRun extends BaseModel
     public function user(): BelongsTo
     {
         return $this->belongsTo(
-            config('auth.providers.users.model', \App\Models\User::class),
+            $this->configuredUserModel(),
             'user_id'
         );
     }

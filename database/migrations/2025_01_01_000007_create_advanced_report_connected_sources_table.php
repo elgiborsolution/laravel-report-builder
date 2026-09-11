@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('source_key')->unique();
 
             $table->unsignedBigInteger('tenant_id')->nullable();
-            $table->unsignedBigInteger('created_by')->nullable();
+            $table->string('created_by')->nullable();
 
             $table->timestamps();
 

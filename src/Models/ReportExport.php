@@ -6,6 +6,7 @@ namespace ElgiborSolution\AdvancedReports\Models;
 
 use ElgiborSolution\AdvancedReports\Models\Concerns\BelongsToTenant;
 use ElgiborSolution\AdvancedReports\Models\Concerns\HasUuid;
+use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $uuid
  * @property int $report_id
  * @property ?int $report_run_id
- * @property ?int $user_id
+ * @property int|string|null $user_id
  * @property string $format // html|pdf|xlsx|csv|json
  * @property string $status  // pending|processing|completed|failed
  * @property ?string $file_path
@@ -26,6 +27,7 @@ class ReportExport extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+    use ResolvesConfiguredUserModel;
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_PROCESSING = 'processing';
@@ -52,7 +54,7 @@ class ReportExport extends BaseModel
     public function user(): BelongsTo
     {
         return $this->belongsTo(
-            config('auth.providers.users.model', \App\Models\User::class),
+            $this->configuredUserModel(),
             'user_id'
         );
     }

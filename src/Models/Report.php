@@ -6,6 +6,7 @@ namespace ElgiborSolution\AdvancedReports\Models;
 
 use ElgiborSolution\AdvancedReports\Models\Concerns\BelongsToTenant;
 use ElgiborSolution\AdvancedReports\Models\Concerns\HasUuid;
+use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property ?string $description
  * @property string $data_source
  * @property ?array $definition
- * @property ?int $created_by
+ * @property int|string|null $created_by
  * @property ?int $tenant_id
  * @property bool $is_public
  * @property bool $is_active
@@ -28,6 +29,7 @@ class Report extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+    use ResolvesConfiguredUserModel;
     use SoftDeletes;
 
     protected $guarded = [];
@@ -54,7 +56,7 @@ class Report extends BaseModel
         return $query->where('is_public', true);
     }
 
-    public function scopeForUser(Builder $query, ?int $userId): Builder
+    public function scopeForUser(Builder $query, int|string|null $userId): Builder
     {
         if ($userId === null) {
             return $query->where('is_public', true);
@@ -78,7 +80,7 @@ class Report extends BaseModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(
-            config('auth.providers.users.model', \App\Models\User::class),
+            $this->configuredUserModel(),
             'created_by'
         );
     }

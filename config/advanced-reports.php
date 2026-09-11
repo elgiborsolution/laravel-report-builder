@@ -12,6 +12,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Optional user model
+    |--------------------------------------------------------------------------
+    | User references in this package are unconstrained strings. Set this only
+    | when the user/creator Eloquent relationships should target a specific
+    | model. When omitted, the model from Laravel's default auth guard is used.
+    */
+    'user_model' => env('ADVANCED_REPORTS_USER_MODEL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Database
     |--------------------------------------------------------------------------
     */

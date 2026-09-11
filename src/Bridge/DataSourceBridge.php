@@ -32,7 +32,7 @@ final class DataSourceBridge
      *
      * @return string The generated source key (e.g., "dynamic:42").
      */
-    public function connect(int $dataSourceId, ?int $tenantId = null, ?int $userId = null): string
+    public function connect(int $dataSourceId, ?int $tenantId = null, int|string|null $userId = null): string
     {
         $dataSource = DataSource::findOrFail($dataSourceId);
         $adapter = $this->createAdapter($dataSource);

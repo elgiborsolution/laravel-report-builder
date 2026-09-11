@@ -23,7 +23,7 @@ class MakeReportSourceCommand extends GeneratorCommand
     /**
      * Replace additional stub placeholders beyond what GeneratorCommand does.
      */
-    protected function replaceClass(string $stub, string $name): string
+    protected function replaceClass($stub, $name)
     {
         $class = str_replace($this->getNamespace($name).'\\', '', $name);
 

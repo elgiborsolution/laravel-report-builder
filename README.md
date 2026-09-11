@@ -38,11 +38,11 @@ Run migrations manually when preferred:
 php artisan migrate
 ```
 
-The migrations create report definitions, runs, exports, snapshots, schedules, permissions, and connected-source records. The reports migration has an optional foreign key to `users.created_by`; applications using that migration should have their users table available first.
+The migrations create report definitions, runs, exports, snapshots, schedules, permissions, and connected-source records. User and role references are nullable, unconstrained identifiers; the package does not require a `users` or `roles` table. They are stored as strings so integer, UUID, ULID, and custom string keys are supported.
 
 ## Configuration
 
-The package uses `config/advanced-reports.php`. It controls the database connection and table prefix, permission and tenant settings, renderer classes, PDF options, synchronous/queued export behavior, cache and row limits, run history, route prefixes/middleware, and designer settings.
+The package uses `config/advanced-reports.php`. It controls the database connection and table prefix, permission and tenant settings, renderer classes, PDF options, synchronous/queued export behavior, cache and row limits, run history, route prefixes/middleware, and designer settings. To use the optional user/creator relationships with a non-default authentication setup, set `ADVANCED_REPORTS_USER_MODEL` to that model's class name; otherwise the package resolves the model from Laravel's default auth guard.
 
 The default API prefix is `api/advanced-reports`. API routes are enabled by default; web preview/download routes are disabled by default. Environment variables documented in the configuration file can override these settings, including `ADVANCED_REPORTS_API_PREFIX`, `ADVANCED_REPORTS_WEB_PREFIX`, `ADVANCED_REPORTS_PDF_DRIVER`, `ADVANCED_REPORTS_QUEUE_EXPORTS`, and the security/performance variables.
 

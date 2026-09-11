@@ -20,15 +20,12 @@ return new class extends Migration
                 ->constrained('advanced_reports')
                 ->cascadeOnDelete();
 
-            $table->foreignId('user_id')
-                ->nullable()
-                ->constrained('users')
-                ->cascadeOnDelete();
+            // User and role storage belongs to the host application. These
+            // unconstrained identifiers support integer, UUID, ULID, and
+            // custom string keys without requiring application tables.
+            $table->string('user_id')->nullable();
 
-            $table->foreignId('role_id')
-                ->nullable()
-                ->constrained()
-                ->cascadeOnDelete();
+            $table->string('role_id')->nullable();
 
             // view, edit, run, export, delete
             $table->string('permission')->default('view');

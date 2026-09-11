@@ -27,10 +27,9 @@ return new class extends Migration
 
             // Multi-tenant scoping (optional)
             $table->unsignedBigInteger('tenant_id')->nullable();
-            $table->foreignId('created_by')
-                ->nullable()
-                ->constrained('users')
-                ->nullOnDelete();
+            // Application identity is optional and may use integer, UUID, ULID,
+            // or other string keys. Keep this as an unconstrained reference.
+            $table->string('created_by')->nullable();
 
             $table->boolean('is_public')->default(false);
             $table->boolean('is_active')->default(true);

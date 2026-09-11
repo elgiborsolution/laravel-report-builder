@@ -6,17 +6,20 @@ namespace ElgiborSolution\AdvancedReports\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 
 /**
  * Row-level permission grant on a report for a user or role.
  *
  * @property int $report_id
- * @property ?int $user_id
- * @property ?int $role_id
+ * @property int|string|null $user_id
+ * @property int|string|null $role_id
  * @property string $permission // view|edit|run|export|delete
  */
 class ReportPermission extends BaseModel
 {
+    use ResolvesConfiguredUserModel;
+
     public const PERMISSION_VIEW = 'view';
     public const PERMISSION_EDIT = 'edit';
     public const PERMISSION_RUN = 'run';
@@ -42,12 +45,12 @@ class ReportPermission extends BaseModel
     public function user(): BelongsTo
     {
         return $this->belongsTo(
-            config('auth.providers.users.model', \App\Models\User::class),
+            $this->configuredUserModel(),
             'user_id'
         );
     }
 
-    public function scopeForUser(Builder $query, ?int $userId): Builder
+    public function scopeForUser(Builder $query, int|string|null $userId): Builder
     {
         if ($userId === null) {
             return $query->whereNull('user_id');

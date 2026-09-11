@@ -93,7 +93,7 @@ class ReportPolicy
      * Extract role IDs from the user. Supports Spatie roles, Sentinel,
      * or a simple getRoleAttribute convention.
      *
-     * @return array<int>
+     * @return array<int, int|string>
      */
     protected function userRoles(object $user): array
     {
@@ -108,7 +108,7 @@ class ReportPolicy
             return $roles->pluck('id')->all();
         }
         if (is_array($roles)) {
-            return array_map(fn ($r) => is_object($r) ? $r->id : (int) $r, $roles);
+            return array_map(fn ($r) => is_object($r) ? $r->id : $r, $roles);
         }
 
         return [];

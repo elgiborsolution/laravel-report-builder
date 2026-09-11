@@ -6,13 +6,14 @@ namespace ElgiborSolution\AdvancedReports\Models;
 
 use ElgiborSolution\AdvancedReports\Models\Concerns\BelongsToTenant;
 use ElgiborSolution\AdvancedReports\Models\Concerns\HasUuid;
+use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property string $uuid
  * @property int $report_id
  * @property ?int $report_run_id
- * @property ?int $created_by
+ * @property int|string|null $created_by
  * @property ?array $parameters
  * @property array $data
  * @property ?array $metadata
@@ -21,6 +22,7 @@ class ReportSnapshot extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+    use ResolvesConfiguredUserModel;
 
     protected $guarded = [];
 
@@ -43,7 +45,7 @@ class ReportSnapshot extends BaseModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(
-            config('auth.providers.users.model', \App\Models\User::class),
+            $this->configuredUserModel(),
             'created_by'
         );
     }

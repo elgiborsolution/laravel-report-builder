@@ -26,10 +26,7 @@ return new class extends Migration
                 ->constrained('advanced_report_runs')
                 ->cascadeOnDelete();
 
-            $table->foreignId('created_by')
-                ->nullable()
-                ->constrained('users')
-                ->nullOnDelete();
+            $table->string('created_by')->nullable();
 
             $table->unsignedBigInteger('tenant_id')->nullable();
 
