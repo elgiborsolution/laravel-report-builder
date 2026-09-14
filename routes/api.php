@@ -27,6 +27,7 @@ Route::prefix($prefix)
         Route::get('sources/available', 'DataSourceBridgeController@listAvailable')->name('advanced-reports.sources.available');
         Route::post('sources/connect', 'DataSourceBridgeController@connect')->name('advanced-reports.sources.connect');
         Route::delete('sources/{key}/disconnect', 'DataSourceBridgeController@disconnect')->name('advanced-reports.sources.disconnect');
+        Route::post('sources/{source}/formula/validate', 'FormulaController@validate')->name('advanced-reports.sources.formula.validate');
 
         // Source schema (wildcard routes AFTER static paths)
         Route::get('sources/{source}/schema', 'ReportSourceController@schema')->name('advanced-reports.sources.schema');

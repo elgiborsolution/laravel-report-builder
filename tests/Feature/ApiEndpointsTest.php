@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElgiborSolution\AdvancedReports\Facades\AdvancedReports;
+use ElgiborSolution\AdvancedReports\Http\Controllers\ReportController;
 use ElgiborSolution\AdvancedReports\Tests\Fixtures\SalesOrderReportSource;
 use ElgiborSolution\AdvancedReports\Tests\TestCase;
 
@@ -10,6 +11,14 @@ uses(TestCase::class);
 
 beforeEach(function () {
     AdvancedReports::registerSource(SalesOrderReportSource::class);
+});
+
+it('resolves the report controller without a circular dependency', function () {
+    expect(app(ReportController::class))->toBeInstanceOf(ReportController::class);
+});
+
+it('uses the package report table when listing reports', function () {
+    $this->getJson('/api/advanced-reports/reports')->assertOk();
 });
 
 it('lists registered sources via the sources endpoint', function () {

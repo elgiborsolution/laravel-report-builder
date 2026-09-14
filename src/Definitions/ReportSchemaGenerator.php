@@ -8,6 +8,7 @@ use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
 use ElgiborSolution\AdvancedReports\Sources\ReportField;
 use ElgiborSolution\AdvancedReports\Sources\SourceRegistry;
 use ElgiborSolution\AdvancedReports\Support\FieldTypeOperatorMap;
+use ElgiborSolution\AdvancedReports\Support\FormulaCapabilities;
 
 /**
  * Produces the JSON schema a frontend drag-and-drop designer consumes to
@@ -101,6 +102,7 @@ final class ReportSchemaGenerator
             'compatible_operators' => $compatibleOperators,
             'suggested_aggregates' => $suggestedAggregates,
             'available_formats' => $availableFormats,
+            'formula_capabilities' => FormulaCapabilities::schema(),
         ]);
     }
 

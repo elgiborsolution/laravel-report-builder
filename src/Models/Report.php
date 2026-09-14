@@ -32,6 +32,8 @@ class Report extends BaseModel
     use ResolvesConfiguredUserModel;
     use SoftDeletes;
 
+    protected $table = 'advanced_reports';
+
     protected $guarded = [];
 
     protected $casts = [

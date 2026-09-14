@@ -32,6 +32,13 @@ it('validates known variables without throwing', function () {
     expect($errors)->toBeEmpty();
 });
 
+it('accepts flattened references for dotted source-field keys', function () {
+    $eval = new SafeExpressionEvaluator();
+
+    expect($eval->validate('customer_name == "Acme"', ['customer.name']))
+        ->toBeEmpty();
+});
+
 it('rejects unknown identifiers as syntax errors', function () {
     $eval = new SafeExpressionEvaluator();
 

@@ -18,6 +18,7 @@ use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
  */
 class ReportPermission extends BaseModel
 {
+    protected $table = 'advanced_report_permissions';
     use ResolvesConfiguredUserModel;
 
     public const PERMISSION_VIEW = 'view';

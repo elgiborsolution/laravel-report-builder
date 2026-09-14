@@ -27,6 +27,8 @@ class ReportExport extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+
+    protected $table = 'advanced_report_exports';
     use ResolvesConfiguredUserModel;
 
     public const STATUS_PENDING = 'pending';

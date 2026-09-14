@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ElgiborSolution\AdvancedReports\Export;
 
-use ElgiborSolution\AdvancedReports\AdvancedReportsManager;
+use ElgiborSolution\AdvancedReports\Engine\ReportEngine;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Events\ReportExportCompleted;
 use ElgiborSolution\AdvancedReports\Events\ReportExportFailed;
@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Queue;
 final class ExportManager
 {
     public function __construct(
-        protected AdvancedReportsManager $manager,
+        protected ReportEngine $engine,
     ) {}
 
     /**
@@ -37,7 +37,7 @@ final class ExportManager
     ): mixed {
         $opts = ExportOptions::fromArray(array_merge($options, ['format' => $format]));
 
-        return $this->manager->engine()->render($result, $format, $opts->toArray());
+        return $this->engine->render($result, $format, $opts->toArray());
     }
 
     /**

@@ -22,6 +22,8 @@ class ReportSnapshot extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+
+    protected $table = 'advanced_report_snapshots';
     use ResolvesConfiguredUserModel;
 
     protected $guarded = [];

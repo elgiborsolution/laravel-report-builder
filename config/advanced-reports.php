@@ -26,7 +26,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'database' => [
-        'connection' => env('ADVANCED_REPORTS_DB_CONNECTION', config('database.default')),
+        // Leave null to use Laravel's current default connection. This lets
+        // tenancy bootstrappers switch package queries to the tenant database.
+        'connection' => env('ADVANCED_REPORTS_DB_CONNECTION'),
         'table_prefix' => 'advanced_report_',
     ],
 

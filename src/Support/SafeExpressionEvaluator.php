@@ -47,7 +47,10 @@ final class SafeExpressionEvaluator implements ExpressionEvaluator
 
         // 1) Syntax check
         try {
-            $parsed = $this->language->parse($expression, array_merge($knownVariables, ['date', 'now', 'sum', 'avg', 'min', 'max', 'round', 'abs', 'int', 'float', 'string']));
+            $parsed = $this->language->parse($expression, array_merge(
+                array_map(fn ($variable) => str_replace('.', '_', (string) $variable), $knownVariables),
+                FormulaCapabilities::functionNames(),
+            ));
         } catch (\Throwable $e) {
             $errors[] = 'Syntax error: '.$e->getMessage();
 
@@ -62,19 +65,7 @@ final class SafeExpressionEvaluator implements ExpressionEvaluator
     protected function registerSafeFunctions(): void
     {
         // The ExpressionLanguage ships with arithmetic/logic; we add helpers.
-        foreach ([
-            'now' => fn () => \Carbon\Carbon::now(),
-            'date' => fn ($v) => \Carbon\Carbon::parse($v),
-            'round' => fn (...$args) => round(...$args),
-            'abs' => fn ($v) => abs($v),
-            'int' => fn ($v) => (int) $v,
-            'float' => fn ($v) => (float) $v,
-            'string' => fn ($v) => (string) $v,
-            'sum' => fn (...$args) => array_sum($args),
-            'avg' => fn (...$args) => count($args) ? array_sum($args) / count($args) : 0,
-            'min' => fn (...$args) => min($args),
-            'max' => fn (...$args) => max($args),
-        ] as $name => $callback) {
+        foreach (FormulaCapabilities::functions() as $name => $callback) {
             $this->language->register(
                 $name,
                 fn (ExpressionLanguage $el, ...$args) => null,

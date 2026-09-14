@@ -27,6 +27,8 @@ class ReportSchedule extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+
+    protected $table = 'advanced_report_schedules';
     use ResolvesConfiguredUserModel;
 
     protected $guarded = [];

@@ -26,6 +26,8 @@ class ReportRun extends BaseModel
 {
     use HasUuid;
     use BelongsToTenant;
+
+    protected $table = 'advanced_report_runs';
     use ResolvesConfiguredUserModel;
 
     public const STATUS_PENDING = 'pending';
