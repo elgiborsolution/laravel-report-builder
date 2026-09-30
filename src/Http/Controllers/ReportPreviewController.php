@@ -42,15 +42,21 @@ class ReportPreviewController
                 user: $request->user(),
             );
 
+            $rows = $result->rows->take(self::PREVIEW_LIMIT)->values()->all();
+
             return response()->json([
                 'columns' => $result->columns,
-                'rows' => $result->rows instanceof \Illuminate\Support\LazyCollection
-                    ? $result->rows->take(self::PREVIEW_LIMIT)->values()->all()
-                    : $result->rows->take(self::PREVIEW_LIMIT)->values()->all(),
+                'rows' => $rows,
                 'aggregates' => $result->aggregates,
                 'groups' => $result->groups ?? [],
+                'presentation_rows' => $this->limitPresentationRows(
+                    $result->presentationRows,
+                    self::PREVIEW_LIMIT,
+                    count($rows),
+                    $result->definition->groups !== [],
+                ),
                 'metadata' => [
-                    'row_count' => min($result->metadata['row_count'] ?? 0, self::PREVIEW_LIMIT),
+                    'row_count' => $result->metadata['row_count'] ?? $result->rows->count(),
                     'truncated' => ($result->metadata['row_count'] ?? 0) > self::PREVIEW_LIMIT,
                 ],
             ]);
@@ -98,15 +104,21 @@ class ReportPreviewController
                 user: $request->user(),
             );
 
+            $rows = $result->rows->take(self::PREVIEW_LIMIT)->values()->all();
+
             return response()->json([
                 'columns' => $result->columns,
-                'rows' => $result->rows instanceof \Illuminate\Support\LazyCollection
-                    ? $result->rows->take(self::PREVIEW_LIMIT)->values()->all()
-                    : $result->rows->take(self::PREVIEW_LIMIT)->values()->all(),
+                'rows' => $rows,
                 'aggregates' => $result->aggregates,
                 'groups' => $result->groups ?? [],
+                'presentation_rows' => $this->limitPresentationRows(
+                    $result->presentationRows,
+                    self::PREVIEW_LIMIT,
+                    count($rows),
+                    $result->definition->groups !== [],
+                ),
                 'metadata' => [
-                    'row_count' => min($result->metadata['row_count'] ?? 0, self::PREVIEW_LIMIT),
+                    'row_count' => $result->metadata['row_count'] ?? $result->rows->count(),
                     'truncated' => ($result->metadata['row_count'] ?? 0) > self::PREVIEW_LIMIT,
                 ],
             ]);
@@ -135,5 +147,45 @@ class ReportPreviewController
         );
 
         return ReportDefinition::fromArray($definitionData);
+    }
+
+    /**
+     * Preview detail rows are capped, while group summaries and grand totals
+     * still describe the full filtered result. Keep only presentation events
+     * whose group begins in the visible detail window, plus the grand total.
+     *
+     * @param  array<int,array<string,mixed>>  $presentationRows
+     * @return array<int,array<string,mixed>>
+     */
+    private function limitPresentationRows(
+        array $presentationRows,
+        int $limit,
+        int $visibleDetailCount,
+        bool $hasGroups,
+    ): array
+    {
+        if (! $hasGroups) {
+            $details = [];
+            for ($rowIndex = 0; $rowIndex < min($visibleDetailCount, $limit); $rowIndex++) {
+                $details[] = ['type' => 'detail', 'row_index' => $rowIndex];
+            }
+
+            return array_merge(
+                $details,
+                array_values(array_filter(
+                    $presentationRows,
+                    static fn (array $row) => in_array($row['type'] ?? null, ['group_subtotal', 'grand_total'], true),
+                )),
+            );
+        }
+
+        return array_values(array_filter($presentationRows, static function (array $row) use ($limit): bool {
+            return match ($row['type'] ?? null) {
+                'detail' => ($row['row_index'] ?? PHP_INT_MAX) < $limit,
+                'group_header', 'group_subtotal' => ($row['detail_start'] ?? PHP_INT_MAX) < $limit,
+                'grand_total' => true,
+                default => false,
+            };
+        }));
     }
 }

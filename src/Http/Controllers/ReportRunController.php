@@ -61,8 +61,11 @@ class ReportRunController
             'run' => $run ? (new ReportRunResource($run))->toArray(request()) : null,
             'metadata' => $result->metadata,
             'columns' => $result->columns,
+            'rows' => $result->rows->all(),
             'row_count' => $result->metadata['row_count'] ?? 0,
             'aggregates' => $result->aggregates,
+            'groups' => $result->groups,
+            'presentation_rows' => $result->presentationRowsWithDetails(),
             'drilldowns' => array_map(fn ($dd) => [
                 'trigger' => $dd['trigger'] ?? null,
                 'type' => $dd['type'] ?? null,

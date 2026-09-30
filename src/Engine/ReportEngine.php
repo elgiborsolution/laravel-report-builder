@@ -72,21 +72,33 @@ final class ReportEngine
             // 5. Evaluate formulas (injects computed fields into each row).
             $rows = $this->formulas->apply($rows, $definition->formulas);
 
-            // 6. Apply grouping (sorts + group structure).
+            // 6. Apply ordered, nested grouping to detail rows. Grouping never
+            // collapses rows or delegates aggregation to SQL.
             $grouped = $this->groups->apply($rows, $definition->groups);
             $rows = $grouped['rows'];
             $groupStructure = $grouped['groups'];
 
-            // 7. Compute aggregates (overall + per-group).
+            // 7. Keep grand totals over all filtered detail rows and compute
+            // per-group subtotals over each complete parent/child path.
             $aggregates = $this->aggregates->apply($rows, $definition->aggregates);
-
-            // 8. Resolve drilldown metadata.
-            $drilldowns = $this->drilldowns->resolveForParameters($definition->drilldowns, $resolvedParameters);
-
-            // Count via a separate query so the lazy cursor isn't consumed.
+            $groupAggregates = $this->aggregates->perGroupPaths(
+                $rows,
+                $grouped['group_row_indexes'],
+                $definition->aggregates,
+            );
             $rowCount = $rows instanceof \Illuminate\Support\LazyCollection
                 ? $this->queryBuilder->count($built['query'])
                 : $rows->count();
+            $presentationRows = $this->groups->presentationRows(
+                $grouped,
+                $groupAggregates,
+                $aggregates,
+                $definition->aggregates,
+                $rowCount,
+            );
+
+            // 8. Resolve drilldown metadata.
+            $drilldowns = $this->drilldowns->resolveForParameters($definition->drilldowns, $resolvedParameters);
 
             $result = new ReportResult(
                 report: $report,
@@ -104,6 +116,7 @@ final class ReportEngine
                     'run_id' => $run->id,
                     'row_count' => $rowCount,
                 ],
+                presentationRows: $presentationRows,
             );
 
             $run->markCompleted($rowCount, ['aggregates' => $aggregates]);
@@ -207,7 +220,7 @@ final class ReportEngine
         };
 
         return $rows instanceof \Illuminate\Support\LazyCollection
-            ? \Illuminate\Support\LazyCollection::make(fn () => yield from $rows->map($normalize))
-            : $rows->map($normalize);
+            ? $rows->map($normalize)->values()
+            : $rows->map($normalize)->values();
     }
 }

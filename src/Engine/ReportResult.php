@@ -29,6 +29,12 @@ final class ReportResult implements Arrayable
         public readonly array $conditionalFormatting = [],
         public readonly ?array $layout = null,
         public readonly array $metadata = [],
+        /**
+         * Ordered display events referencing detail rows by row_index. Kept
+         * separate from rows so headers/subtotals never affect counts/data.
+         * @var array<int,array<string,mixed>>
+         */
+        public readonly array $presentationRows = [],
     ) {}
 
     /** @return array<string,mixed> */
@@ -48,6 +54,28 @@ final class ReportResult implements Arrayable
             'conditional_formatting' => $this->conditionalFormatting,
             'layout' => $this->layout,
             'rows' => $this->rows->all(),
+            'presentation_rows' => $this->presentationRowsWithDetails(),
         ];
+    }
+
+    /**
+     * Expand implicit ungrouped detail events for consumers that serialize or
+     * render all rows. Grouped reports already carry an ordered interleaving.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function presentationRowsWithDetails(): array
+    {
+        if ($this->definition->groups !== []) {
+            return $this->presentationRows;
+        }
+
+        $detailCount = (int) ($this->metadata['row_count'] ?? $this->rows->count());
+        $details = [];
+        for ($index = 0; $index < $detailCount; $index++) {
+            $details[] = ['type' => 'detail', 'row_index' => $index];
+        }
+
+        return array_merge($details, $this->presentationRows);
     }
 }

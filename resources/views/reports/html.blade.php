@@ -57,6 +57,11 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
         tbody tr:nth-child(even) { background: #fafafa; }
         tfoot td { background: #eff6ff; font-weight: 600; }
         .group-header td { background: #e0e7ff; font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.04em; }
+        .group-subtotal td { background: #f3f4f6; font-weight: 600; }
+        .group-subtotal-label td { background: #f3f4f6; font-weight: 600; }
+        .grand-total td { background: #eff6ff; font-weight: 700; }
+        .grand-total-label td { background: #eff6ff; font-weight: 700; }
+        .aggregate-value + .aggregate-value { display: block; }
         a[data-drilldown] { color: #2563eb; text-decoration: none; }
         a[data-drilldown]:hover { text-decoration: underline; }
     </style>
@@ -78,42 +83,104 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
             </tr>
         </thead>
         <tbody>
-            @foreach ($rows as $row)
-                @php
-                    // Emit group header rows for the first group field when its value changes.
-                    $showGroupHeader = false;
-                    $groupField = array_key_first($groups) ?? null;
-                @endphp
-
-                <tr>
-                    @foreach ($columns as $col)
-                        @php
-                            $field = $col['field'] ?? '';
-                            $value = data_get($row, $field);
-                            $styleAttr = $styleForCell($field, $value);
-                        @endphp
-                        <td {!! $styleAttr !!}>{!! $drilldownLink($field, $value, $row) !!}</td>
-                    @endforeach
-                </tr>
+            @foreach ($presentationRows as $presentationRow)
+                @if (($presentationRow['type'] ?? null) === 'group_header')
+                    <tr class="group-header" data-group-level="{{ $presentationRow['level'] ?? 0 }}">
+                        <td colspan="{{ max(1, count($columns)) }}" style="padding-left: {{ 10 + (($presentationRow['level'] ?? 0) * 20) }}px">
+                            {{ $presentationRow['label'] ?? 'Group' }}: {{ $presentationRow['display_value'] ?? '(blank)' }}
+                        </td>
+                    </tr>
+                @elseif (($presentationRow['type'] ?? null) === 'detail')
+                    @php $row = $presentationRow['row'] ?? []; @endphp
+                    <tr class="detail-row">
+                        @foreach ($columns as $col)
+                            @php
+                                $field = $col['field'] ?? '';
+                                $value = data_get($row, $field);
+                                $styleAttr = $styleForCell($field, $value);
+                            @endphp
+                            <td {!! $styleAttr !!}>{!! $drilldownLink($field, $value, $row) !!}</td>
+                        @endforeach
+                    </tr>
+                @elseif (($presentationRow['type'] ?? null) === 'group_subtotal')
+                    @php
+                        $aggregateCells = $presentationRow['aggregate_cells'] ?? [];
+                        $aggregateFields = array_keys($aggregateCells);
+                        $labelField = null;
+                        foreach ($columns as $candidate) {
+                            $candidateField = $candidate['field'] ?? '';
+                            if (! in_array($candidateField, $aggregateFields, true)) {
+                                $labelField = $candidateField;
+                                break;
+                            }
+                        }
+                    @endphp
+                    @if ($labelField === null)
+                        <tr class="group-subtotal-label" data-group-level="{{ $presentationRow['level'] ?? 0 }}">
+                            <td colspan="{{ max(1, count($columns)) }}">{{ $presentationRow['label'] ?? 'Subtotal' }}</td>
+                        </tr>
+                    @endif
+                    <tr class="group-subtotal" data-group-level="{{ $presentationRow['level'] ?? 0 }}">
+                        @foreach ($columns as $col)
+                            @php
+                                $field = $col['field'] ?? '';
+                                $cells = $aggregateCells[$field] ?? [];
+                            @endphp
+                            <td>
+                                @if ($cells)
+                                    @foreach ($cells as $cell)
+                                        <span class="aggregate-value">@if (count($cells) > 1){{ $cell['label'] }}: @endif{{ is_scalar($cell['value'] ?? null) ? $cell['value'] : '' }}</span>
+                                    @endforeach
+                                @elseif ($field === $labelField)
+                                    {{ $presentationRow['label'] ?? 'Subtotal' }}
+                                @endif
+                            </td>
+                        @endforeach
+                    </tr>
+                @endif
             @endforeach
         </tbody>
 
-        @if (! empty($aggregates))
-        <tfoot>
-            <tr>
-                @php
-                    $aggValues = array_values($aggregates);
-                    $aggCount = count($aggValues);
-                @endphp
-                @foreach ($columns as $i => $col)
+        @php $grandTotalRows = array_filter($presentationRows, static fn ($row) => ($row['type'] ?? null) === 'grand_total'); @endphp
+        @if ($grandTotalRows)
+            <tfoot>
+                @foreach ($grandTotalRows as $grandTotal)
                     @php
-                        $pad = count($columns) - $aggCount;
-                        $value = $i >= $pad ? ($aggValues[$i - $pad] ?? '') : ($i === 0 ? 'Total' : '');
+                        $aggregateCells = $grandTotal['aggregate_cells'] ?? [];
+                        $aggregateFields = array_keys($aggregateCells);
+                        $labelField = null;
+                        foreach ($columns as $candidate) {
+                            $candidateField = $candidate['field'] ?? '';
+                            if (! in_array($candidateField, $aggregateFields, true)) {
+                                $labelField = $candidateField;
+                                break;
+                            }
+                        }
                     @endphp
-                    <td>{{ is_scalar($value) ? $value : '' }}</td>
+                    @if ($labelField === null)
+                        <tr class="grand-total-label">
+                            <td colspan="{{ max(1, count($columns)) }}">{{ $grandTotal['label'] ?? 'Grand total' }}</td>
+                        </tr>
+                    @endif
+                    <tr class="grand-total">
+                        @foreach ($columns as $col)
+                            @php
+                                $field = $col['field'] ?? '';
+                                $cells = $aggregateCells[$field] ?? [];
+                            @endphp
+                            <td>
+                                @if ($cells)
+                                    @foreach ($cells as $cell)
+                                        <span class="aggregate-value">@if (count($cells) > 1){{ $cell['label'] }}: @endif{{ is_scalar($cell['value'] ?? null) ? $cell['value'] : '' }}</span>
+                                    @endforeach
+                                @elseif ($field === $labelField)
+                                    {{ $grandTotal['label'] ?? 'Grand total' }}
+                                @endif
+                            </td>
+                        @endforeach
+                    </tr>
                 @endforeach
-            </tr>
-        </tfoot>
+            </tfoot>
         @endif
     </table>
 </body>

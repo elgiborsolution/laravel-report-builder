@@ -30,7 +30,11 @@ final class QueryBuilderEngine
     {
         $query = $source->query($parameters);
 
-        // SELECT: only declared columns; ensure we never dump hidden fields.
+        // Grouping and aggregate inputs are execution-only fields: they must
+        // be fetched even when omitted from the user-visible Columns list.
+        $this->ensureCalculationFieldsSelected($source, $query, $definition);
+
+        // Resolve the user-visible columns separately from the source query.
         $columns = $this->resolveColumns($source, $definition);
 
         // Apply filters and sorts via resolvers (validated upstream).
@@ -38,6 +42,83 @@ final class QueryBuilderEngine
         $query = $this->sorts->apply($source, $query, $definition->sorts);
 
         return ['query' => $query, 'columns' => $columns];
+    }
+
+    /**
+     * A source may intentionally return a partial SELECT. Add simple source
+     * fields used by grouping/aggregates in that case; default wildcard
+     * queries already carry them, while dotted relation paths remain the
+     * source's responsibility (and are read with data_get after hydration).
+     */
+    protected function ensureCalculationFieldsSelected(
+        ReportSourceContract $source,
+        Builder $query,
+        ReportDefinition $definition,
+    ): void {
+        $selected = $query->columns ?? null;
+        if ($selected === null) {
+            return;
+        }
+
+        $selected = is_array($selected) ? $selected : [$selected];
+        if (in_array('*', $selected, true)) {
+            return;
+        }
+
+        $formulaNames = collect($definition->formulas)->pluck('name')->filter()->all();
+        $fields = array_unique(array_merge(
+            array_map(static fn (array $group) => $group['field'] ?? '', $definition->groups),
+            array_map(static fn (array $aggregate) => $aggregate['field'] ?? '', $definition->aggregates),
+        ));
+
+        foreach ($fields as $field) {
+            if (! is_string($field)
+                || $field === ''
+                || in_array($field, $formulaNames, true)
+                || str_contains($field, '.')
+                || $this->selectionContainsField($selected, $field)) {
+                continue;
+            }
+
+            $sourceField = $source->field($field);
+            if (! $sourceField) {
+                continue;
+            }
+
+            $expression = $sourceField->selectExpr ?? $field;
+            if ($expression !== $field) {
+                // selectExpr belongs to the PHP source definition, not the
+                // report definition. Alias it back to the public field key.
+                $expression = preg_replace('/\\s+as\\s+.+$/i', '', $expression) ?: $expression;
+                $expression = new \Illuminate\Database\Query\Expression(
+                    $expression.' as '.$query->getGrammar()->wrap($field),
+                );
+            }
+
+            $query->addSelect($expression);
+        }
+    }
+
+    /** @param array<int,mixed> $selected */
+    protected function selectionContainsField(array $selected, string $field): bool
+    {
+        foreach ($selected as $expression) {
+            if (! is_string($expression)) {
+                continue;
+            }
+
+            $expression = trim(str_replace(['`', '"', '[', ']'], '', $expression));
+            if ($expression === $field || str_ends_with($expression, '.'.$field)) {
+                return true;
+            }
+
+            if (preg_match('/\\bas\\s+([a-zA-Z_][a-zA-Z0-9_]*)$/i', $expression, $matches)
+                && $matches[1] === $field) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

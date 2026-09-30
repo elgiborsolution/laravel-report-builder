@@ -8,6 +8,7 @@ use ElgiborSolution\AdvancedReports\Contracts\ReportRenderer;
 use ElgiborSolution\AdvancedReports\Engine\DrilldownResolver;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Support\Formatter;
+use ElgiborSolution\AdvancedReports\Support\PresentationTableRows;
 use ElgiborSolution\AdvancedReports\Support\ValueResolver;
 
 /**
@@ -35,6 +36,7 @@ final class HtmlRenderer implements ReportRenderer
         $rows = $result->rows->all();
         $columns = $this->prepareColumns($result);
         $formattedRows = $this->formatRows($result);
+        $presentationRows = $this->formatPresentationRows($result, $formattedRows);
         $drilldownMap = $this->buildDrilldownMap($result);
         $conditionalStyles = $this->buildConditionalStyles($result);
 
@@ -44,6 +46,7 @@ final class HtmlRenderer implements ReportRenderer
             'columns' => $columns,
             'rows' => $formattedRows,
             'rawRows' => $rows,
+            'presentationRows' => $presentationRows,
             'groups' => $result->groups,
             'aggregates' => $result->aggregates,
             'drilldowns' => $result->drilldowns,
@@ -88,6 +91,55 @@ final class HtmlRenderer implements ReportRenderer
 
             return $row;
         }, $rows);
+    }
+
+    /**
+     * Resolve detail references and format subtotal/grand-total values using
+     * the same field formats as the visible report columns.
+     *
+     * @param  array<int,array<string,mixed>>  $formattedRows
+     * @return array<int,array<string,mixed>>
+     */
+    protected function formatPresentationRows(ReportResult $result, array $formattedRows): array
+    {
+        $presentationRows = $result->presentationRowsWithDetails();
+        if ($presentationRows === []) {
+            $presentationRows = array_map(
+                static fn (int $index) => ['type' => 'detail', 'row_index' => $index],
+                array_keys($formattedRows),
+            );
+        }
+
+        $formats = [];
+        foreach ($result->columns as $column) {
+            $field = $column['field'] ?? $column['name'] ?? null;
+            if ($field !== null) {
+                $formats[$field] = $column['format'] ?? $column['type'] ?? null;
+            }
+        }
+
+        foreach ($presentationRows as &$presentationRow) {
+            if (($presentationRow['type'] ?? null) === 'detail') {
+                $presentationRow['row'] = $formattedRows[$presentationRow['row_index'] ?? -1] ?? [];
+                continue;
+            }
+
+            if (isset($presentationRow['aggregate_cells']) && is_array($presentationRow['aggregate_cells'])) {
+                foreach ($presentationRow['aggregate_cells'] as $field => &$cells) {
+                    foreach ($cells as &$cell) {
+                        $cell['value'] = $this->formatter->format(
+                            $cell['value'] ?? null,
+                            PresentationTableRows::aggregateFormat($cell, $formats[$field] ?? null),
+                        );
+                    }
+                    unset($cell);
+                }
+                unset($cells);
+            }
+        }
+        unset($presentationRow);
+
+        return $presentationRows;
     }
 
     /**

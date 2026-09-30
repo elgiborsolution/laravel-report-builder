@@ -8,6 +8,7 @@ use ElgiborSolution\AdvancedReports\Contracts\ReportRenderer;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Exceptions\MissingDependencyException;
 use ElgiborSolution\AdvancedReports\Support\Formatter;
+use ElgiborSolution\AdvancedReports\Support\PresentationTableRows;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -20,7 +21,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
  * Excel renderer powered by Laravel Excel (maatwebsite/excel).
- * Supports columns, groups (as sheets), aggregates (footer row), and
+ * Supports column-aligned grouping/subtotal rows, grand totals, and
  * format-based number formatting.
  */
 final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeadings, WithTitle, WithColumnFormatting, WithStyles
@@ -28,6 +29,11 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
     use Exportable;
 
     protected ReportResult $result;
+
+    protected array $options = [];
+
+    /** @var array<int,string> Worksheet cell references for averages of integer fields. */
+    protected array $averageCellFormats = [];
 
     public function __construct(protected Formatter $formatter) {}
 
@@ -43,6 +49,7 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
         }
 
         $this->result = $result;
+        $this->options = $options;
         $filename = ($options['filename'] ?? 'report').'_'.now()->format('Y-m-d_His').'.xlsx';
 
         return \Maatwebsite\Excel\Facades\Excel::download($this, $filename);
@@ -60,31 +67,42 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
         $sourceRows = $this->result->rows instanceof \Illuminate\Support\LazyCollection
             ? $this->result->rows->collect()
             : $this->result->rows;
-        $rows = $sourceRows->map(function ($row) use ($columns) {
-            $values = [];
-            foreach ($columns as $col) {
-                $field = $col['field'] ?? $col['name'] ?? null;
-                $format = $col['format'] ?? $col['type'] ?? null;
-                $values[] = $this->formatter->format(
-                    $field !== null ? data_get($row, $field) : null,
-                    $format
-                );
+        $presentationRows = $this->result->presentationRowsWithDetails();
+        if ($presentationRows === []) {
+            $presentationRows = [];
+            for ($index = 0; $index < $sourceRows->count(); $index++) {
+                $presentationRows[] = ['type' => 'detail', 'row_index' => $index];
+            }
+        }
+
+        $rows = collect();
+        $this->averageCellFormats = [];
+        foreach ($presentationRows as $presentationRow) {
+            if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)
+                && ! ($this->options['include_aggregates'] ?? true)) {
+                continue;
             }
 
-            return $values;
-        });
+            if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)
+                && ! PresentationTableRows::hasLabelCell($presentationRow, $columns)) {
+                $rows->push(PresentationTableRows::labelCells($presentationRow, $columns));
+            }
 
-        // Append aggregates as the last row.
-        if ($this->result->aggregates) {
-            $footer = array_fill(0, count($columns), null);
-            $aggregateValues = array_values($this->result->aggregates);
-            foreach ($aggregateValues as $index => $value) {
-                $columnIndex = count($columns) - count($aggregateValues) + $index;
-                if ($columnIndex >= 0) {
-                    $footer[$columnIndex] = $value;
+            $excelRow = $rows->count() + 2; // Heading occupies row 1.
+            $rows->push(PresentationTableRows::cells($presentationRow, $sourceRows, $columns, $this->formatter));
+
+            if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)) {
+                foreach ($columns as $columnIndex => $column) {
+                    $field = $column['field'] ?? $column['name'] ?? '';
+                    $format = $column['format'] ?? $column['type'] ?? null;
+                    foreach ($presentationRow['aggregate_cells'][$field] ?? [] as $aggregate) {
+                        if (strtolower((string) ($aggregate['function'] ?? '')) === 'avg' && $format === 'integer') {
+                            $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnIndex + 1).$excelRow;
+                            $this->averageCellFormats[] = $cell;
+                        }
+                    }
                 }
             }
-            $rows->push($footer);
         }
 
         return $rows;
@@ -146,6 +164,10 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
                     ],
                 ],
             ]);
+
+        foreach ($this->averageCellFormats as $cell) {
+            $sheet->getStyle($cell)->getNumberFormat()->setFormatCode('#,##0.00');
+        }
 
         // Auto-width
         foreach (range(1, count($this->result->columns)) as $i) {

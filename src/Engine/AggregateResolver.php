@@ -72,6 +72,35 @@ final class AggregateResolver
         return $perGroup;
     }
 
+    /**
+     * Compute aggregates for every complete group path produced by
+     * GroupResolver. Each entry's row indexes refer to the sorted detail rows;
+     * this keeps repeated child values beneath different parents distinct.
+     *
+     * @param  array<string,array<int,int>>  $groupRowIndexes
+     * @return array<string,array<string,mixed>>
+     */
+    public function perGroupPaths(Collection|LazyCollection $rows, array $groupRowIndexes, array $aggregates): array
+    {
+        if ($aggregates === [] || $groupRowIndexes === []) {
+            return [];
+        }
+
+        $details = ($rows instanceof LazyCollection ? $rows->collect() : $rows)->values();
+        $results = [];
+
+        foreach ($groupRowIndexes as $pathKey => $indexes) {
+            $groupRows = collect($indexes)
+                ->map(fn (int $index) => $details->get($index))
+                ->filter(fn ($row) => $row !== null)
+                ->values();
+
+            $results[$pathKey] = $this->apply($groupRows, $aggregates);
+        }
+
+        return $results;
+    }
+
     protected function groupKey(string $field, mixed $value): string
     {
         return $field.'::'.(is_scalar($value) ? (string) $value : md5(serialize($value)));

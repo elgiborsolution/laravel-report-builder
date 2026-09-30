@@ -65,3 +65,32 @@ it('runs a report through the API and returns metadata', function () {
         ->assertOk()
         ->assertJsonStructure(['metadata', 'columns', 'rows']);
 });
+
+it('returns separate detail rows and grouping presentation events for designer preview', function () {
+    $response = $this->postJson('/api/advanced-reports/reports/preview-inline', [
+        'definition' => [
+            'name' => 'Grouped Preview',
+            'data_source' => 'sales_orders',
+            'columns' => [
+                ['field' => 'order_number', 'label' => 'Order'],
+                ['field' => 'total_amount', 'label' => 'Amount', 'format' => 'decimal'],
+            ],
+            'groups' => [['field' => 'customer_name', 'label' => 'Customer']],
+            'aggregates' => [['field' => 'total_amount', 'function' => 'sum', 'label' => 'Amount total']],
+        ],
+        'parameters' => [],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonStructure(['rows', 'groups', 'aggregates', 'presentation_rows', 'metadata'])
+        ->assertJsonPath('metadata.row_count', 3);
+
+    $presentationRows = $response->json('presentation_rows');
+    $types = array_column($presentationRows, 'type');
+    $detailRows = array_values(array_filter($presentationRows, static fn ($row) => ($row['type'] ?? null) === 'detail'));
+
+    expect($response->json('rows'))->toHaveCount(3)
+        ->and($detailRows)->toHaveCount(3)
+        ->and($detailRows[0])->toHaveKey('row_index', 0)
+        ->and($types)->toContain('group_header', 'group_subtotal', 'grand_total');
+});

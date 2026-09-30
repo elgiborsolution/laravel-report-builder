@@ -7,6 +7,7 @@ namespace ElgiborSolution\AdvancedReports\Renderers;
 use ElgiborSolution\AdvancedReports\Contracts\ReportRenderer;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Support\Formatter;
+use ElgiborSolution\AdvancedReports\Support\PresentationTableRows;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -30,16 +31,9 @@ final class CsvRenderer implements ReportRenderer
         $escape = $options['escape'] ?? '\\';
         $bom = (bool) ($options['bom'] ?? true);
 
-        // Callback writes to php://output (streamed).
-        $writeRow = function (array $row) use ($delimiter, $enclosure, $escape) {
-            $fp = fopen('php://output', 'w');
-            fputcsv($fp, $row, $delimiter, $enclosure, $escape);
-            fclose($fp);
-        };
-
         $columns = $result->columns;
 
-        return new StreamedResponse(function () use ($result, $columns, $writeRow, $bom, $options) {
+        return new StreamedResponse(function () use ($result, $columns, $bom, $options, $delimiter, $enclosure, $escape) {
             $handle = fopen('php://output', 'w');
             if (! $handle) {
                 return;
@@ -55,34 +49,47 @@ final class CsvRenderer implements ReportRenderer
                 fn ($col) => $col['label'] ?? ucfirst($col['field'] ?? ''),
                 $columns
             );
-            fputcsv($handle, $headers);
+            fputcsv($handle, $headers, $delimiter, $enclosure, $escape);
 
-            // Data rows.
-            foreach ($result->rows as $row) {
-                $cells = [];
+            $presentationRows = $result->presentationRows;
 
-                foreach ($columns as $col) {
-                    $field = $col['field'] ?? $col['name'] ?? null;
-                    $format = $col['format'] ?? $col['type'] ?? null;
-                    $value = $field !== null ? data_get($row, $field) : null;
-                    $cells[] = $this->formatter->format($value, $format);
+            if ($result->definition->groups === []) {
+                // Preserve the streaming path for ungrouped reports; their
+                // detail rows precede any optional grand-total event.
+                foreach ($result->rows as $row) {
+                    fputcsv($handle, PresentationTableRows::detailCells((array) $row, $columns, $this->formatter), $delimiter, $enclosure, $escape);
                 }
 
-                fputcsv($handle, $cells);
-            }
-
-            // Aggregate footer row (optional).
-            if ($result->aggregates && ($options['include_aggregates'] ?? true)) {
-                $footer = array_fill(0, count($columns), '');
-                $aggregateValues = array_values($result->aggregates);
-                // Place aggregate values in the last cells.
-                foreach ($aggregateValues as $i => $val) {
-                    $idx = count($columns) - count($aggregateValues) + $i;
-                    if ($idx >= 0) {
-                        $footer[$idx] = $val;
+                foreach ($presentationRows as $presentationRow) {
+                    if (! in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)
+                        || ! ($options['include_aggregates'] ?? true)) {
+                        continue;
                     }
+
+                    if (! PresentationTableRows::hasLabelCell($presentationRow, $columns)) {
+                        fputcsv($handle, PresentationTableRows::labelCells($presentationRow, $columns), $delimiter, $enclosure, $escape);
+                    }
+
+                    fputcsv($handle, PresentationTableRows::cells($presentationRow, collect(), $columns, $this->formatter), $delimiter, $enclosure, $escape);
                 }
-                fputcsv($handle, $footer);
+            } else {
+                $details = $result->rows instanceof \Illuminate\Support\LazyCollection
+                    ? $result->rows->collect()
+                    : $result->rows;
+                foreach ($presentationRows as $presentationRow) {
+                    if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)
+                        && ! ($options['include_aggregates'] ?? true)) {
+                        continue;
+                    }
+
+                    if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)
+                        && ! PresentationTableRows::hasLabelCell($presentationRow, $columns)) {
+                        fputcsv($handle, PresentationTableRows::labelCells($presentationRow, $columns), $delimiter, $enclosure, $escape);
+                    }
+
+                    $cells = PresentationTableRows::cells($presentationRow, $details, $columns, $this->formatter);
+                    fputcsv($handle, $cells, $delimiter, $enclosure, $escape);
+                }
             }
 
             fclose($handle);

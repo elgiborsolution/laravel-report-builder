@@ -5,6 +5,8 @@ declare(strict_types=1);
 use ElgiborSolution\AdvancedReports\Facades\AdvancedReports;
 use ElgiborSolution\AdvancedReports\Renderers\HtmlRenderer;
 use ElgiborSolution\AdvancedReports\Renderers\JsonRenderer;
+use ElgiborSolution\AdvancedReports\Support\Formatter;
+use ElgiborSolution\AdvancedReports\Support\PresentationTableRows;
 use ElgiborSolution\AdvancedReports\Tests\Fixtures\SalesOrderReportSource;
 use ElgiborSolution\AdvancedReports\Tests\TestCase;
 
@@ -76,6 +78,96 @@ it('renders HTML output as a string containing a table', function () {
         ->and($html)->toContain('Amount with tax')
         ->and($html)->toContain('1,110')
         ->and($html)->toContain('SO-001');
+});
+
+it('renders grouping events consistently and aligns group totals to their source columns', function () {
+    \ElgiborSolution\AdvancedReports\Models\Report::create([
+        'name' => 'Grouped Sales Output',
+        'code' => 'grouped_sales_output',
+        'data_source' => 'sales_orders',
+        'definition' => [
+            'name' => 'Grouped Sales Output',
+            'data_source' => 'sales_orders',
+            'columns' => [
+                ['field' => 'order_number', 'label' => 'Order'],
+                ['field' => 'total_amount', 'label' => 'Amount', 'format' => 'decimal'],
+            ],
+            'groups' => [['field' => 'customer_name', 'label' => 'Customer']],
+            'aggregates' => [['field' => 'total_amount', 'function' => 'sum', 'label' => 'Amount total']],
+        ],
+        'is_active' => true,
+        'is_public' => true,
+    ]);
+
+    $json = AdvancedReports::render('grouped_sales_output', 'json');
+    $presentation = $json['presentation_rows'];
+    $subtotal = collect($presentation)->firstWhere('type', 'group_subtotal');
+    $grandTotal = collect($presentation)->firstWhere('type', 'grand_total');
+
+    expect($json)->toHaveKeys(['rows', 'groups', 'aggregates', 'presentation_rows'])
+        ->and($json['rows'])->toHaveCount(3)
+        ->and(collect($presentation)->where('type', 'detail'))->toHaveCount(3)
+        ->and($presentation[0]['type'])->toBe('group_header')
+        ->and($presentation[0]['label'])->toBe('Customer')
+        ->and($subtotal['aggregate_cells']['total_amount'][0]['value'])->toBe(6000.0)
+        ->and($grandTotal['aggregate_cells']['total_amount'][0]['value'])->toBe(8000.0);
+
+    $html = AdvancedReports::render('grouped_sales_output', 'html');
+    expect($html)->toContain('Customer: Acme')
+        ->and($html)->toContain('Subtotal: Customer — Acme')
+        ->and($html)->toContain('Grand total');
+
+    $csvResponse = AdvancedReports::render('grouped_sales_output', 'csv');
+    ob_start();
+    $csvResponse->sendContent();
+    $csv = ltrim((string) ob_get_clean(), "\xEF\xBB\xBF");
+    $csvRows = array_map(
+        static fn (string $line) => str_getcsv($line),
+        array_values(array_filter(preg_split('/\\r\\n|\\r|\\n/', trim($csv)) ?: [])),
+    );
+    $csvSubtotal = collect($csvRows)->first(static fn (array $row) => str_starts_with((string) ($row[0] ?? ''), 'Subtotal: Customer — Acme'));
+    $csvGrandTotal = collect($csvRows)->first(static fn (array $row) => ($row[0] ?? '') === 'Grand total');
+    expect($csvSubtotal[1])->toBe('6000')
+        ->and($csvGrandTotal[1])->toBe('8000');
+
+    $result = AdvancedReports::run('grouped_sales_output');
+    config()->set('advanced-reports.pdf.driver', 'custom');
+    app()->bind('grouped-report-test-pdf-engine', static fn () => static fn (string $html, array $options = []) => $html);
+    app()->tag('grouped-report-test-pdf-engine', 'advanced-reports.pdf.engine');
+    $pdfHtml = app(\ElgiborSolution\AdvancedReports\Renderers\PdfRenderer::class)->render($result);
+    expect($pdfHtml)->toContain('Customer: Acme')
+        ->and($pdfHtml)->toContain('Grand total');
+
+    $excel = app(\ElgiborSolution\AdvancedReports\Renderers\ExcelRenderer::class);
+    $property = new ReflectionProperty($excel, 'result');
+    $property->setAccessible(true);
+    $property->setValue($excel, $result);
+    $excelRows = $excel->collection();
+    $excelSubtotal = $excelRows->first(static fn (array $row) => str_starts_with((string) ($row[0] ?? ''), 'Subtotal: Customer — Acme'));
+    $excelGrandTotal = $excelRows->first(static fn (array $row) => ($row[0] ?? '') === 'Grand total');
+    expect($excelSubtotal[1])->toBe(6000.0)
+        ->and($excelGrandTotal[1])->toBe(8000.0);
+});
+
+it('preserves average precision for integer fields in presentation cells', function () {
+    $row = [
+        'type' => 'group_subtotal',
+        'label' => 'Subtotal: Quantity',
+        'aggregate_cells' => [
+            'quantity' => [['label' => 'Average quantity', 'function' => 'avg', 'value' => 1.5]],
+        ],
+    ];
+
+    $cells = PresentationTableRows::cells(
+        $row,
+        collect(),
+        [['field' => 'quantity', 'format' => 'integer']],
+        new Formatter(),
+    );
+
+    expect($cells[0])->toBe(1.5)
+        ->and(PresentationTableRows::hasLabelCell($row, [['field' => 'quantity']]))->toBeFalse()
+        ->and(PresentationTableRows::labelCells($row, [['field' => 'quantity']]))->toBe(['Subtotal: Quantity']);
 });
 
 it('exports selected formula columns to CSV and XLSX in matching order', function () {

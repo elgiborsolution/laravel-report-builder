@@ -41,6 +41,7 @@ final class JsonRenderer implements ReportRenderer
             'rows' => $rows,
             'groups' => $result->groups,
             'aggregates' => $result->aggregates,
+            'presentation_rows' => $result->presentationRowsWithDetails(),
             'formulas' => array_map(fn ($f) => [
                 'name' => $f['name'] ?? null,
                 'type' => $f['type'] ?? 'string',
