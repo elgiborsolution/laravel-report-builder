@@ -23,9 +23,21 @@ beforeEach(function () {
             'columns' => [
                 ['field' => 'order_number', 'label' => 'Order'],
                 ['field' => 'total_amount', 'label' => 'Amount', 'format' => 'currency'],
+                ['field' => 'amount_with_tax', 'label' => 'Amount with tax', 'format' => 'currency'],
             ],
+            'formulas' => [[
+                'name' => 'amount_with_tax',
+                'label' => 'Amount with tax',
+                'expression' => 'total_amount * 1.11',
+                'type' => 'decimal',
+                'format' => 'currency',
+            ]],
             'aggregates' => [
-                ['field' => 'total_amount', 'function' => 'sum', 'label' => 'Total'],
+                ['field' => 'customer_name', 'function' => 'count', 'label' => 'Rows'],
+                ['field' => 'total_amount', 'function' => 'sum', 'label' => 'Sum'],
+                ['field' => 'total_amount', 'function' => 'avg', 'label' => 'Average'],
+                ['field' => 'total_amount', 'function' => 'min', 'label' => 'Minimum'],
+                ['field' => 'total_amount', 'function' => 'max', 'label' => 'Maximum'],
             ],
         ],
         'is_active' => true,
@@ -38,8 +50,21 @@ it('renders JSON output with required keys', function () {
 
     expect($rendered)
         ->toHaveKeys(['metadata', 'columns', 'rows', 'groups', 'aggregates', 'drilldowns'])
+        ->and($rendered['columns'][2])->toBe([
+            'field' => 'amount_with_tax',
+            'label' => 'Amount with tax',
+            'type' => 'decimal',
+            'format' => 'currency',
+        ])
+        ->and($rendered['rows'][0]['amount_with_tax'])->toContain('1,110')
         ->and($rendered['rows'])->not->toBeEmpty()
-        ->and($rendered['aggregates']['Total'])->toBe(8000.0);
+        ->and($rendered['aggregates'])->toBe([
+            'Rows' => 3,
+            'Sum' => 8000.0,
+            'Average' => 8000 / 3,
+            'Minimum' => 1000.0,
+            'Maximum' => 5000.0,
+        ]);
 });
 
 it('renders HTML output as a string containing a table', function () {
@@ -48,7 +73,29 @@ it('renders HTML output as a string containing a table', function () {
     expect($html)->toBeString()
         ->and($html)->toContain('<table')
         ->and($html)->toContain('Sales')
+        ->and($html)->toContain('Amount with tax')
+        ->and($html)->toContain('1,110')
         ->and($html)->toContain('SO-001');
+});
+
+it('exports selected formula columns to CSV and XLSX in matching order', function () {
+    $csvResponse = AdvancedReports::render('sales_json', 'csv');
+    ob_start();
+    $csvResponse->sendContent();
+    $csv = ob_get_clean();
+
+    expect($csv)
+        ->toContain('Amount with tax')
+        ->toContain('1,110');
+
+    $result = AdvancedReports::run('sales_json');
+    $excel = app(\ElgiborSolution\AdvancedReports\Renderers\ExcelRenderer::class);
+    $property = new ReflectionProperty($excel, 'result');
+    $property->setAccessible(true);
+    $property->setValue($excel, $result);
+
+    expect($excel->headings())->toBe(['Order', 'Amount', 'Amount with tax'])
+        ->and($excel->collection()->first()[2])->toContain('1,110');
 });
 
 it('excludes hidden fields from rendered output', function () {

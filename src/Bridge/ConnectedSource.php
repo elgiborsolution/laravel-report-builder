@@ -7,6 +7,7 @@ namespace ElgiborSolution\AdvancedReports\Bridge;
 use ElgiborSolution\AdvancedReports\Models\BaseModel;
 use ElgiborSolution\AdvancedReports\Models\Concerns\ResolvesConfiguredUserModel;
 use ESolution\DataSources\Models\DataSource;
+use ESolution\DataSources\Support\DatabaseConnection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -34,6 +35,16 @@ class ConnectedSource extends BaseModel
         'data_source_id' => 'integer',
         'tenant_id' => 'integer',
     ];
+
+    /**
+     * Bridge registrations are Builder metadata, alongside DataSource and
+     * API Builder configuration. Keep them on the configured central Builder
+     * connection even while a request has initialized a tenant connection.
+     */
+    public function getConnectionName(): ?string
+    {
+        return DatabaseConnection::configuredName();
+    }
 
     /*
     |--------------------------------------------------------------------------

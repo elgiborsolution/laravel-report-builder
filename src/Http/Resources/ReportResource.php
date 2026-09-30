@@ -15,11 +15,13 @@ class ReportResource extends JsonResource
     public function toArray($request): array
     {
         return [
+            'id' => $this->id,
             'uuid' => $this->uuid,
             'name' => $this->name,
             'code' => $this->code,
             'description' => $this->description,
             'data_source' => $this->data_source,
+            'definition' => $this->definition,
             'is_public' => $this->is_public,
             'is_active' => $this->is_active,
             'created_by' => $this->created_by,

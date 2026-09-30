@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ElgiborSolution\AdvancedReports\Engine;
 
 use ElgiborSolution\AdvancedReports\Definitions\ReportDefinition;
-use ElgiborSolution\AdvancedReports\Sources\ReportSource;
+use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
@@ -26,7 +26,7 @@ final class QueryBuilderEngine
     /**
      * @return array{query:Builder, columns:array<int,array>}
      */
-    public function build(ReportSource $source, ReportDefinition $definition, array $parameters): array
+    public function build(ReportSourceContract $source, ReportDefinition $definition, array $parameters): array
     {
         $query = $source->query($parameters);
 
@@ -79,17 +79,41 @@ final class QueryBuilderEngine
      *
      * @return array<int,array> Display columns (label/field/format).
      */
-    protected function resolveColumns(ReportSource $source, ReportDefinition $definition): array
+    protected function resolveColumns(ReportSourceContract $source, ReportDefinition $definition): array
     {
-        $declared = $definition->columns;
+        $formulae = collect($definition->formulas)->keyBy('name');
 
-        // Reject hidden fields from display.
-        return array_values(array_filter($declared, function ($col) use ($source) {
-            $field = $col['field'] ?? null;
+        return array_values(array_filter(array_map(function (array $column) use ($source, $formulae) {
+            $field = $column['field'] ?? null;
+            if (! $field) {
+                return null;
+            }
 
-            return $field
-                && $source->fields()->has($field)
-                && ! $source->field($field)?->hidden;
-        }));
+            $sourceField = $source->field($field);
+            if ($sourceField) {
+                if ($sourceField->hidden) {
+                    return null;
+                }
+
+                return $column;
+            }
+
+            $formula = $formulae->get($field);
+            if (! $formula) {
+                return null;
+            }
+
+            // Formula identifiers are virtual row keys. Never use them as
+            // SQL identifiers; FormulaResolver injects them after fetching.
+            $column['label'] = trim((string) ($column['label'] ?? '')) !== ''
+                ? $column['label']
+                : ($formula['label'] ?? $field);
+            $column['type'] = $column['type'] ?? $formula['type'] ?? 'string';
+            $column['format'] = ($column['format'] ?? '') !== ''
+                ? $column['format']
+                : ($formula['format'] ?? null);
+
+            return $column;
+        }, $definition->columns), static fn ($column) => $column !== null));
     }
 }

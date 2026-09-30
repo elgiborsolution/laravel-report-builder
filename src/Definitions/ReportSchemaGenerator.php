@@ -82,11 +82,14 @@ final class ReportSchemaGenerator
             ])
             ->all();
 
-        // Suggested aggregates for aggregatable fields.
+        // Count is available for every visible field. Numeric functions are
+        // offered only when the source explicitly marks the field capable.
         $suggestedAggregates = $visibleFields
-            ->filter(fn (ReportField $field) => $field->aggregatable)
             ->mapWithKeys(fn (ReportField $field) => [
-                $field->key => FieldTypeOperatorMap::aggregatesFor($field->type),
+                $field->key => $field->aggregatable
+                    && in_array($field->type, ['integer', 'decimal'], true)
+                        ? FieldTypeOperatorMap::aggregatesFor($field->type)
+                        : ['count'],
             ])
             ->all();
 

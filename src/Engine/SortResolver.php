@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ElgiborSolution\AdvancedReports\Engine;
 
-use ElgiborSolution\AdvancedReports\Sources\ReportSource;
+use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
 use Illuminate\Contracts\Database\Query\Builder;
 
 /**
@@ -15,7 +15,7 @@ final class SortResolver
     /**
      * @param  array<int,array>  $sorts
      */
-    public function apply(ReportSource $source, Builder $query, array $sorts): Builder
+    public function apply(ReportSourceContract $source, Builder $query, array $sorts): Builder
     {
         foreach ($sorts as $s) {
             $field = $s['field'] ?? null;

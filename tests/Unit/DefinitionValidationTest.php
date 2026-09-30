@@ -38,6 +38,39 @@ it('passes a valid definition', function () {
     expect(true)->toBeTrue();
 });
 
+it('allows count on any valid field and numeric aggregates on decimal fields', function () {
+    $def = ReportDefinition::fromArray([
+        'name' => 'Grouped totals',
+        'data_source' => 'sales_orders',
+        'groups' => [['field' => 'customer_name', 'label' => 'Customer']],
+        'aggregates' => [
+            ['field' => 'customer_name', 'function' => 'count', 'label' => 'Rows'],
+            ...array_map(fn (string $function) => [
+                'field' => 'total_amount', 'function' => $function, 'label' => ucfirst($function),
+            ], ['sum', 'avg', 'min', 'max']),
+        ],
+    ]);
+
+    app(ReportDefinitionValidator::class)->validate($def);
+
+    expect(true)->toBeTrue();
+});
+
+it('rejects numeric aggregate functions on non-numeric fields', function () {
+    $def = ReportDefinition::fromArray([
+        'name' => 'Invalid total',
+        'data_source' => 'sales_orders',
+        'aggregates' => [['field' => 'customer_name', 'function' => 'sum']],
+    ]);
+
+    try {
+        app(ReportDefinitionValidator::class)->validate($def);
+        $this->fail('Expected DefinitionInvalidException');
+    } catch (DefinitionInvalidException $e) {
+        expect(collect($e->errors)->implode('; '))->toContain('requires an aggregatable numeric field');
+    }
+});
+
 it('rejects an unknown source', function () {
     $def = ReportDefinition::fromArray([
         'name' => 'X',
@@ -60,6 +93,52 @@ it('rejects columns referencing unknown fields', function () {
     } catch (DefinitionInvalidException $e) {
         expect($e->errors)->toHaveKey(0)
             ->and($e->errors[0])->toContain('unknown field');
+    }
+});
+
+it('accepts a formula as a report column', function () {
+    $def = ReportDefinition::fromArray([
+        'name' => 'Calculated sales',
+        'data_source' => 'sales_orders',
+        'columns' => [
+            ['field' => 'order_number', 'label' => 'Order'],
+            ['field' => 'total_with_tax', 'label' => 'Total with tax', 'type' => 'decimal', 'format' => 'currency'],
+        ],
+        'formulas' => [[
+            'name' => 'total_with_tax',
+            'label' => 'Total with tax',
+            'expression' => 'total_amount * 1.11',
+            'type' => 'decimal',
+            'format' => 'currency',
+        ]],
+    ]);
+
+    app(ReportDefinitionValidator::class)->validate($def);
+
+    expect(true)->toBeTrue();
+});
+
+it('rejects duplicate formula names and source-field collisions', function () {
+    foreach ([
+        [
+            ['name' => 'computed_total', 'expression' => 'total_amount + 1'],
+            ['name' => 'COMPUTED_TOTAL', 'expression' => 'total_amount + 2'],
+        ],
+        [['name' => 'total_amount', 'expression' => 'total_amount + 1']],
+    ] as $formulas) {
+        $def = ReportDefinition::fromArray([
+            'name' => 'Invalid formulas',
+            'data_source' => 'sales_orders',
+            'formulas' => $formulas,
+        ]);
+
+        try {
+            app(ReportDefinitionValidator::class)->validate($def);
+            $this->fail('Expected DefinitionInvalidException');
+        } catch (DefinitionInvalidException $e) {
+            expect(collect($e->errors)->implode('; '))
+                ->toMatch('/duplicated|conflicts with a source field/i');
+        }
     }
 });
 

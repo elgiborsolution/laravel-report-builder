@@ -249,6 +249,44 @@ class DynamicDataSourceAdapterTest extends TestCase
         $this->assertEquals(2, (int) $acmeRow->invoice_count);
     }
 
+    public function test_prefixed_connection_uses_configured_physical_name_without_double_prefixing(): void
+    {
+        config()->set('database.connections.testing.prefix', 'tenant_');
+        DB::purge('testing');
+
+        Schema::connection('testing')->create('report_invoices', function ($table) {
+            $table->id();
+            $table->decimal('grand_total', 12, 2);
+        });
+        DB::connection('testing')->table('report_invoices')->insert(['grand_total' => 1250.50]);
+
+        $source = new DataSource([
+            'name' => 'Tenant invoices',
+            // Data Sources stores the physical table name returned by metadata.
+            'table_name' => 'tenant_report_invoices',
+            'database_scope' => 'tenant',
+            'use_custom_query' => false,
+            'columns' => ['grand_total'],
+        ]);
+        $source->id = 99;
+
+        $adapter = new DynamicDataSourceAdapter($source);
+        $field = $adapter->fields()->get('grand_total');
+
+        $this->assertSame('decimal', $field->type);
+        $this->assertTrue($field->aggregatable);
+        $this->assertSame(1250.50, (float) $adapter->query()->first()->grand_total);
+    }
+
+    public function test_connection_without_prefix_uses_configured_table_name(): void
+    {
+        $adapter = new DynamicDataSourceAdapter($this->dataSource);
+
+        $this->assertSame('', DB::connection()->getTablePrefix());
+        $this->assertSame('decimal', $adapter->fields()->get('total')->type);
+        $this->assertStringContainsString('"invoices"', $adapter->query()->toSql());
+    }
+
     public function test_description_includes_table_name_for_table_source(): void
     {
         $adapter = new DynamicDataSourceAdapter($this->dataSource);

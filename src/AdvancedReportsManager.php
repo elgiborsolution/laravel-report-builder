@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElgiborSolution\AdvancedReports;
 
 use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
+use ElgiborSolution\AdvancedReports\Bridge\DataSourceBridge;
 use ElgiborSolution\AdvancedReports\Definitions\ReportDefinition;
 use ElgiborSolution\AdvancedReports\Definitions\ReportDefinitionValidator;
 use ElgiborSolution\AdvancedReports\Engine\ReportEngine;
@@ -34,6 +35,7 @@ final class AdvancedReportsManager
         protected ExportManager $exports,
         protected ReportDefinitionValidator $validator,
         protected FieldPermissionChecker $fields,
+        protected DataSourceBridge $dynamicSources,
     ) {}
 
     /**
@@ -65,6 +67,13 @@ final class AdvancedReportsManager
     public function source(string $key): ?ReportSourceContract
     {
         return $this->sources->get($key);
+    }
+
+    /** Validate a definition before execution, including inline previews. */
+    public function validateDefinition(ReportDefinition $definition, array $parameters = []): void
+    {
+        $this->ensureSourceRegistered($definition->dataSource);
+        $this->validator->validate($definition, $parameters);
     }
 
     /**
@@ -112,8 +121,7 @@ final class AdvancedReportsManager
 
         $definition = $this->definition($report->definition);
 
-        $this->ensureSourceRegistered($definition->dataSource);
-        $this->validator->validate($definition, $parameters);
+        $this->validateDefinition($definition, $parameters);
 
         return $this->engine->run($report, $definition, $parameters, $user);
     }
@@ -172,7 +180,7 @@ final class AdvancedReportsManager
 
     protected function ensureSourceRegistered(string $sourceKey): void
     {
-        if (! $this->sources->has($sourceKey)) {
+        if (! $this->sources->has($sourceKey) && ! $this->dynamicSources->ensureRegistered($sourceKey)) {
             throw SourceNotRegisteredException::forKey($sourceKey);
         }
     }

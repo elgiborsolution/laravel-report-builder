@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElgiborSolution\AdvancedReports\Engine;
 
 use ElgiborSolution\AdvancedReports\Contracts\ReportRenderer;
+use ElgiborSolution\AdvancedReports\Bridge\DataSourceBridge;
 use ElgiborSolution\AdvancedReports\Definitions\ReportDefinition;
 use ElgiborSolution\AdvancedReports\Events\ReportCompleted;
 use ElgiborSolution\AdvancedReports\Events\ReportFailed;
@@ -30,6 +31,7 @@ final class ReportEngine
     public function __construct(
         protected Container $container,
         protected SourceRegistry $sources,
+        protected DataSourceBridge $dynamicSources,
         protected QueryBuilderEngine $queryBuilder,
         protected ParameterResolver $parameters,
         protected FormulaResolver $formulas,
@@ -46,6 +48,7 @@ final class ReportEngine
      */
     public function run(Report $report, ReportDefinition $definition, array $parameters, ?Authenticatable $user = null): ReportResult
     {
+        $this->dynamicSources->ensureRegistered($definition->dataSource);
         $source = $this->sources->get($definition->dataSource);
 
         // Persist a run record up-front so failures are still auditable.

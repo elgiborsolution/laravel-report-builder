@@ -277,13 +277,30 @@ class ReportBuilderIntegrationTest extends TestCase
         // Verify suggested_aggregates for numeric fields.
         $suggestedAggregates = $response->json('suggested_aggregates');
         $this->assertArrayHasKey('amount', $suggestedAggregates);
-        $this->assertContains('sum', $suggestedAggregates['amount']);
-        $this->assertContains('avg', $suggestedAggregates['amount']);
+        $this->assertSame(['count', 'sum', 'avg', 'min', 'max'], $suggestedAggregates['amount']);
+        $this->assertSame(['count'], $suggestedAggregates['status']);
 
         // Verify available_formats.
         $availableFormats = $response->json('available_formats');
         $this->assertArrayHasKey('order_number', $availableFormats);
         $this->assertContains('string', $availableFormats['order_number']);
+    }
+
+    public function test_connected_source_is_rehydrated_before_a_new_schema_request(): void
+    {
+        $sourceKey = $this->connectDataSource();
+
+        // Simulate the empty process-local registry of a later HTTP request.
+        // The route middleware must restore it from the persisted connection,
+        // not the controller.
+        app(SourceRegistry::class)->flush();
+        $this->assertFalse(app(SourceRegistry::class)->has($sourceKey));
+
+        $this->getJson("/api/advanced-reports/sources/{$sourceKey}/designer-schema")
+            ->assertOk()
+            ->assertJsonPath('source.key', $sourceKey);
+
+        $this->assertTrue(app(SourceRegistry::class)->has($sourceKey));
     }
 
     public function test_can_create_report_with_connected_source(): void
@@ -316,6 +333,101 @@ class ReportBuilderIntegrationTest extends TestCase
             'code' => 'orders_report',
             'data_source' => $sourceKey,
         ]);
+    }
+
+    public function test_formula_columns_persist_reload_preview_and_run_as_virtual_fields(): void
+    {
+        $sourceKey = $this->connectDataSource();
+        $definition = [
+            'name' => 'Orders With Tax',
+            'data_source' => $sourceKey,
+            'columns' => [
+                ['field' => 'order_number', 'label' => 'Order'],
+                ['field' => 'amount_with_tax', 'label' => 'Amount with tax', 'format' => 'currency'],
+            ],
+            'formulas' => [[
+                'id' => 'formula-tax',
+                'name' => 'amount_with_tax',
+                'label' => 'Amount with tax',
+                'expression' => 'amount * 1.1',
+                'type' => 'decimal',
+                'format' => 'currency',
+            ]],
+        ];
+
+        $created = $this->postJson('/api/advanced-reports/reports', [
+            'name' => 'Orders With Tax',
+            'code' => 'orders_with_tax',
+            'data_source' => $sourceKey,
+            'definition' => $definition,
+        ]);
+
+        $created->assertCreated()
+            ->assertJsonPath('data.definition.formulas.0.id', 'formula-tax')
+            ->assertJsonPath('data.definition.columns.1.field', 'amount_with_tax');
+
+        $reportId = $created->json('data.id');
+        $this->getJson("/api/advanced-reports/reports/{$reportId}")
+            ->assertOk()
+            ->assertJsonPath('data.definition.formulas.0.name', 'amount_with_tax')
+            ->assertJsonPath('data.definition.columns.1.label', 'Amount with tax');
+
+        $preview = $this->postJson("/api/advanced-reports/reports/{$reportId}/preview", ['parameters' => []]);
+        $preview->assertOk()
+            ->assertJsonPath('columns.1.field', 'amount_with_tax')
+            ->assertJsonPath('columns.1.label', 'Amount with tax')
+            ->assertJsonPath('columns.1.type', 'decimal')
+            ->assertJsonPath('columns.1.format', 'currency');
+        $this->assertEqualsWithDelta(1650.0, (float) $preview->json('rows.0.amount_with_tax'), 0.0001);
+
+        $run = $this->postJson("/api/advanced-reports/reports/{$reportId}/run", ['format' => 'json']);
+        $run->assertOk()
+            ->assertJsonPath('columns.1.field', 'amount_with_tax')
+            ->assertJsonPath('columns.1.type', 'decimal')
+            ->assertJsonPath('columns.1.format', 'currency');
+        $this->assertStringContainsString('1,650', $run->json('rows.0.amount_with_tax'));
+
+        $updatedDefinition = $definition;
+        $updatedDefinition['formulas'][0]['expression'] = 'amount * 1.2';
+        $updatedDefinition['columns'][1]['label'] = 'Gross amount';
+        $this->putJson("/api/advanced-reports/reports/{$reportId}", [
+            'name' => 'Orders With Tax',
+            'data_source' => $sourceKey,
+            'definition' => $updatedDefinition,
+        ])->assertOk()
+            ->assertJsonPath('data.definition.formulas.0.expression', 'amount * 1.2')
+            ->assertJsonPath('data.definition.columns.1.label', 'Gross amount');
+
+        $updatedPreview = $this->postJson("/api/advanced-reports/reports/{$reportId}/preview", ['parameters' => []]);
+        $updatedPreview
+            ->assertOk()
+            ->assertJsonPath('columns.1.label', 'Gross amount')
+            ->assertJsonPath('columns.1.field', 'amount_with_tax');
+        $this->assertEqualsWithDelta(1800.0, (float) $updatedPreview->json('rows.0.amount_with_tax'), 0.0001);
+    }
+
+    public function test_report_api_rejects_duplicate_invalid_and_source_colliding_formula_names(): void
+    {
+        $sourceKey = $this->connectDataSource();
+        foreach ([
+            [['name' => 'amount', 'expression' => 'amount * 2']],
+            [
+                ['name' => 'net_total', 'expression' => 'amount * 2'],
+                ['name' => 'NET_TOTAL', 'expression' => 'amount * 3'],
+            ],
+            [['name' => '12bad', 'expression' => 'amount * 2']],
+        ] as $formulas) {
+            $this->postJson('/api/advanced-reports/reports', [
+                'name' => 'Invalid Formula Report',
+                'code' => 'invalid_formula_' . uniqid(),
+                'data_source' => $sourceKey,
+                'definition' => [
+                    'name' => 'Invalid Formula Report',
+                    'data_source' => $sourceKey,
+                    'formulas' => $formulas,
+                ],
+            ])->assertUnprocessable();
+        }
     }
 
     public function test_preview_returns_capped_results(): void
@@ -353,8 +465,15 @@ class ReportBuilderIntegrationTest extends TestCase
                 'columns' => [
                     ['field' => 'order_number', 'label' => 'Order #'],
                     ['field' => 'customer_name', 'label' => 'Customer'],
-                    ['field' => 'amount', 'label' => 'Amount'],
+                    ['field' => 'amount_with_tax', 'label' => 'Amount with tax'],
                 ],
+                'formulas' => [[
+                    'name' => 'amount_with_tax',
+                    'label' => 'Amount with tax',
+                    'expression' => 'amount * 1.1',
+                    'type' => 'decimal',
+                    'format' => 'decimal',
+                ]],
             ],
             'parameters' => [],
         ]);
@@ -372,6 +491,9 @@ class ReportBuilderIntegrationTest extends TestCase
         $rows = $response->json('rows');
         $this->assertNotEmpty($rows);
         $this->assertLessThanOrEqual(50, count($rows));
+        $response->assertJsonPath('columns.2.field', 'amount_with_tax')
+            ->assertJsonPath('columns.2.type', 'decimal');
+        $this->assertEqualsWithDelta(1650.0, (float) $response->json('rows.0.amount_with_tax'), 0.0001);
     }
 
     public function test_can_export_report_to_pdf(): void

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ElgiborSolution\AdvancedReports\Engine;
 
-use ElgiborSolution\AdvancedReports\Sources\ReportSource;
+use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
 use ElgiborSolution\AdvancedReports\Support\Operators;
 use ElgiborSolution\AdvancedReports\Support\ValueResolver;
 use Illuminate\Contracts\Database\Query\Builder;
@@ -19,12 +19,12 @@ final class FilterResolver
     public function __construct(protected ValueResolver $resolver) {}
 
     /**
-     * @param  ReportSource  $source
+     * @param  ReportSourceContract  $source
      * @param  Builder  $query
      * @param  array<int,array>  $filters
      * @param  array<string,mixed>  $parameters
      */
-    public function apply(ReportSource $source, Builder $query, array $filters, array $parameters): Builder
+    public function apply(ReportSourceContract $source, Builder $query, array $filters, array $parameters): Builder
     {
         foreach ($filters as $f) {
             $field = $f['field'] ?? null;

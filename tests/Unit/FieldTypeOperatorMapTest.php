@@ -128,39 +128,26 @@ class FieldTypeOperatorMapTest extends TestCase
     public function test_suggested_aggregates_for_numeric_types(): void
     {
         $intAggregates = FieldTypeOperatorMap::aggregatesFor('integer');
-        $this->assertContains('sum', $intAggregates);
-        $this->assertContains('avg', $intAggregates);
-        $this->assertContains('min', $intAggregates);
-        $this->assertContains('max', $intAggregates);
-        $this->assertContains('count', $intAggregates);
-        $this->assertContains('count_distinct', $intAggregates);
+        $this->assertSame(['count', 'sum', 'avg', 'min', 'max'], $intAggregates);
 
         $decAggregates = FieldTypeOperatorMap::aggregatesFor('decimal');
-        $this->assertContains('sum', $decAggregates);
-        $this->assertContains('avg', $decAggregates);
-        $this->assertContains('min', $decAggregates);
-        $this->assertContains('max', $decAggregates);
-        $this->assertContains('count', $decAggregates);
-        $this->assertContains('count_distinct', $decAggregates);
+        $this->assertSame(['count', 'sum', 'avg', 'min', 'max'], $decAggregates);
     }
 
     public function test_string_aggregates_limited_to_count(): void
     {
         $aggregates = FieldTypeOperatorMap::aggregatesFor('string');
 
-        $this->assertContains('count', $aggregates);
-        $this->assertContains('count_distinct', $aggregates);
+        $this->assertSame(['count'], $aggregates);
         $this->assertNotContains('sum', $aggregates);
         $this->assertNotContains('avg', $aggregates);
     }
 
-    public function test_date_aggregates_include_min_max(): void
+    public function test_date_aggregates_only_include_count(): void
     {
         $aggregates = FieldTypeOperatorMap::aggregatesFor('date');
 
-        $this->assertContains('min', $aggregates);
-        $this->assertContains('max', $aggregates);
-        $this->assertContains('count', $aggregates);
+        $this->assertSame(['count'], $aggregates);
         $this->assertNotContains('sum', $aggregates);
         $this->assertNotContains('avg', $aggregates);
     }

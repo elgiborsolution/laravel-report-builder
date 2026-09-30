@@ -86,15 +86,6 @@ final class HtmlRenderer implements ReportRenderer
                 }
             }
 
-            // Also format formula columns.
-            foreach ($result->formulas as $f) {
-                $name = $f['name'] ?? null;
-                $format = $f['format'] ?? $f['type'] ?? null;
-                if ($name !== null && array_key_exists($name, $row)) {
-                    $row[$name] = $this->formatter->format($row[$name], $format);
-                }
-            }
-
             return $row;
         }, $rows);
     }

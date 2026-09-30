@@ -68,15 +68,6 @@ final class CsvRenderer implements ReportRenderer
                     $cells[] = $this->formatter->format($value, $format);
                 }
 
-                // Also include formula fields.
-                foreach ($result->formulas as $f) {
-                    $name = $f['name'] ?? null;
-                    $format = $f['format'] ?? null;
-                    if ($name !== null && array_key_exists($name, $row)) {
-                        $cells[] = $this->formatter->format($row[$name], $format);
-                    }
-                }
-
                 fputcsv($handle, $cells);
             }
 

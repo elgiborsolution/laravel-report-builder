@@ -6,7 +6,6 @@ namespace ElgiborSolution\AdvancedReports\Http\Controllers;
 
 use ElgiborSolution\AdvancedReports\Bridge\ConnectedSource;
 use ElgiborSolution\AdvancedReports\Bridge\DataSourceBridge;
-use ESolution\DataSources\Models\DataSource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,7 +25,15 @@ class DataSourceBridgeController
     public function connect(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'data_source_id' => ['required', 'integer', 'exists:data_sources,id'],
+            'data_source_id' => [
+                'required',
+                'integer',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! $this->bridge->hasMetadataDataSource((int) $value)) {
+                        $fail('The selected data source is invalid.');
+                    }
+                },
+            ],
         ]);
 
         $dataSourceId = (int) $validated['data_source_id'];
@@ -101,12 +108,8 @@ class DataSourceBridgeController
      */
     public function listAvailable(): JsonResponse
     {
-        $connectedIds = ConnectedSource::pluck('data_source_id')->all();
-
-        $available = DataSource::query()
-            ->when(count($connectedIds) > 0, fn ($q) => $q->whereNotIn('id', $connectedIds))
-            ->get()
-            ->map(function (DataSource $ds) {
+        $available = $this->bridge->listAvailable()
+            ->map(function ($ds) {
                 return [
                     'id' => $ds->id,
                     'name' => $ds->name,

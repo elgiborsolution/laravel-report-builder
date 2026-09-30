@@ -78,22 +78,12 @@ final class JsonRenderer implements ReportRenderer
     protected function formatRows(ReportResult $result): array
     {
         $columns = $result->columns;
-        $formulas = $result->formulas;
-
-        return $result->rows->map(function (array $row) use ($columns, $formulas) {
+        return $result->rows->map(function (array $row) use ($columns) {
             foreach ($columns as $col) {
                 $field = $col['field'] ?? null;
                 $format = $col['format'] ?? $col['type'] ?? null;
                 if ($field !== null && array_key_exists($field, $row)) {
                     $row[$field] = $this->formatter->format($row[$field], $format);
-                }
-            }
-
-            foreach ($formulas as $f) {
-                $name = $f['name'] ?? null;
-                $format = $f['format'] ?? $f['type'] ?? null;
-                if ($name !== null && array_key_exists($name, $row)) {
-                    $row[$name] = $this->formatter->format($row[$name], $format);
                 }
             }
 

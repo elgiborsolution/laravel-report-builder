@@ -107,6 +107,10 @@ final class ReportDefinitionValidator
     protected function validateColumns(ReportDefinition $d): void
     {
         $source = $this->sources->get($d->dataSource);
+        $formulaNames = array_fill_keys(array_filter(array_map(
+            fn (array $formula) => $formula['name'] ?? null,
+            $d->formulas
+        )), true);
 
         foreach ($d->columns as $i => $col) {
             $field = $col['field'] ?? null;
@@ -115,7 +119,7 @@ final class ReportDefinitionValidator
                 continue;
             }
 
-            if (! $source->fields()->has($field)) {
+            if (! $source->fields()->has($field) && ! isset($formulaNames[$field])) {
                 $this->errors[] = "Column references unknown field [{$field}].";
                 continue;
             }
@@ -181,11 +185,15 @@ final class ReportDefinitionValidator
                 $this->errors[] = "Aggregate references unknown field [".($field ?? 'null')."].";
                 continue;
             }
-            if (! $source->field($field)?->aggregatable) {
-                $this->errors[] = "Field [{$field}] is not aggregatable.";
-            }
-            if ($func && ! in_array(strtolower((string) $func), Operators::aggregateFunctions(), true)) {
+            $function = strtolower((string) $func);
+            if (! in_array($function, Operators::aggregateFunctions(), true)) {
                 $this->errors[] = "Aggregate uses unsupported function [{$func}].";
+                continue;
+            }
+
+            $reportField = $source->field($field);
+            if ($function !== 'count' && (! $reportField?->aggregatable || ! in_array($reportField->type, ['integer', 'decimal'], true))) {
+                $this->errors[] = "Function [{$function}] requires an aggregatable numeric field; [{$field}] is not eligible.";
             }
         }
     }
@@ -214,6 +222,12 @@ final class ReportDefinitionValidator
     protected function validateFormulas(ReportDefinition $d): void
     {
         $source = $this->sources->get($d->dataSource);
+        $seenNames = [];
+        $sourceNames = [];
+        foreach ($source->fields()->keys() as $fieldKey) {
+            $sourceNames[] = strtolower((string) $fieldKey);
+            $sourceNames[] = strtolower(str_replace('.', '_', (string) $fieldKey));
+        }
         $vars = array_merge(
             $source->fields()->keys()->all(),
             array_map(fn ($f) => $f['name'] ?? '', $d->formulas),
@@ -226,6 +240,19 @@ final class ReportDefinitionValidator
                 $this->errors[] = 'Each formula requires a name and expression.';
                 continue;
             }
+
+            $normalizedName = strtolower((string) $name);
+            if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', (string) $name)) {
+                $this->errors[] = "Formula name [{$name}] must be a valid field identifier.";
+            }
+            if (isset($seenNames[$normalizedName])) {
+                $this->errors[] = "Formula name [{$name}] is duplicated.";
+            }
+            if (in_array($normalizedName, $sourceNames, true)) {
+                $this->errors[] = "Formula name [{$name}] conflicts with a source field.";
+            }
+            $seenNames[$normalizedName] = true;
+
             $errors = $this->expressions->validate((string) $expr, $vars);
             foreach ($errors as $err) {
                 $this->errors[] = "Formula [{$name}]: {$err}";

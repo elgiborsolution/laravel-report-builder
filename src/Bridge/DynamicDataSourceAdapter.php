@@ -8,6 +8,7 @@ use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
 use ElgiborSolution\AdvancedReports\Sources\ReportField;
 use ElgiborSolution\AdvancedReports\Sources\ReportParameter;
 use ESolution\DataSources\Models\DataSource;
+use ESolution\DataSources\Support\DatabaseConnection;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +85,11 @@ final class DynamicDataSourceAdapter implements ReportSourceContract
         return $this->resolvedFields;
     }
 
+    public function field(string $key): ?ReportField
+    {
+        return $this->fields()->get($key);
+    }
+
     /**
      * @return Collection<string, ReportParameter>
      */
@@ -118,13 +124,15 @@ final class DynamicDataSourceAdapter implements ReportSourceContract
      */
     public function query(array $parameters = []): Builder
     {
+        $connection = $this->executionConnectionName();
+
         if ($this->dataSource->use_custom_query && $this->dataSource->custom_query) {
             $query = $this->substituteParameters($this->dataSource->custom_query, $parameters);
 
-            return DB::query()->fromSub($query, 'dynamic_source');
+            return DB::connection($connection)->query()->fromSub($query, 'dynamic_source');
         }
 
-        return DB::table($this->dataSource->table_name);
+        return DB::connection($connection)->table($this->resolvedTableName());
     }
 
     /**
@@ -153,18 +161,40 @@ final class DynamicDataSourceAdapter implements ReportSourceContract
         }
 
         try {
-            $tableName = $this->dataSource->table_name;
+            $tableName = $this->resolvedTableName();
 
-            if (! Schema::hasTable($tableName)) {
+            if (! Schema::connection($this->executionConnectionName())->hasTable($tableName)) {
                 return 'string';
             }
 
-            $columnType = Schema::getColumnType($tableName, $column);
+            $columnType = Schema::connection($this->executionConnectionName())
+                ->getColumnType($tableName, $column);
 
             return $this->mapDatabaseType($columnType);
         } catch (\Throwable) {
             return 'string';
         }
+    }
+
+    /**
+     * Convert a physical table name stored by Data Sources into the logical
+     * name expected by Laravel's connection-aware Schema and query builders.
+     *
+     * Data Sources may persist a table name obtained from database metadata,
+     * including the connection's table prefix. Laravel applies that prefix
+     * itself, so passing the physical name to Schema::connection() or table()
+     * would apply it a second time (for example, es_es_direct_invoice).
+     */
+    private function resolvedTableName(): string
+    {
+        $tableName = trim((string) $this->dataSource->table_name);
+        $prefix = DB::connection($this->executionConnectionName())->getTablePrefix();
+
+        if ($prefix === '' || ! str_starts_with($tableName, $prefix)) {
+            return $tableName;
+        }
+
+        return substr($tableName, strlen($prefix));
     }
 
     /**
@@ -225,5 +255,24 @@ final class DynamicDataSourceAdapter implements ReportSourceContract
         }
 
         return $sql;
+    }
+
+    /**
+     * Resolve the connection on which source *data* runs, independently from
+     * the central connection used to load DataSource metadata.
+     *
+     * A central source must remain central after X-Tenant has initialized the
+     * tenant. A tenant source intentionally follows the connection made
+     * current by tenancy initialization; no default connection is changed.
+     */
+    private function executionConnectionName(): string
+    {
+        $scope = strtolower(trim((string) ($this->dataSource->database_scope ?? 'central')));
+
+        if ($scope === 'tenant') {
+            return DB::getDefaultConnection();
+        }
+
+        return DatabaseConnection::configuredName();
     }
 }

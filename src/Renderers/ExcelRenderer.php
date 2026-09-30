@@ -56,34 +56,33 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
 
     public function collection(): \Illuminate\Support\Collection
     {
-        $rows = $this->result->rows->map(function ($row) {
-            foreach ($this->result->columns as $col) {
+        $columns = $this->result->columns;
+        $sourceRows = $this->result->rows instanceof \Illuminate\Support\LazyCollection
+            ? $this->result->rows->collect()
+            : $this->result->rows;
+        $rows = $sourceRows->map(function ($row) use ($columns) {
+            $values = [];
+            foreach ($columns as $col) {
                 $field = $col['field'] ?? $col['name'] ?? null;
                 $format = $col['format'] ?? $col['type'] ?? null;
-                if ($field !== null && array_key_exists($field, $row)) {
-                    $row[$field] = $this->formatter->format($row[$field], $format);
-                }
-            }
-            foreach ($this->result->formulas as $f) {
-                $name = $f['name'] ?? null;
-                $format = $f['format'] ?? null;
-                if ($name !== null && array_key_exists($name, $row)) {
-                    $row[$name] = $this->formatter->format($row[$name], $format);
-                }
+                $values[] = $this->formatter->format(
+                    $field !== null ? data_get($row, $field) : null,
+                    $format
+                );
             }
 
-            return $row;
+            return $values;
         });
 
         // Append aggregates as the last row.
         if ($this->result->aggregates) {
-            $footer = ['_aggregate_row' => true];
-            foreach ($this->result->columns as $col) {
-                $field = $col['field'] ?? null;
-                $footer[$field] = null;
-            }
-            foreach ($this->result->aggregates as $label => $value) {
-                $footer[$label] = $value;
+            $footer = array_fill(0, count($columns), null);
+            $aggregateValues = array_values($this->result->aggregates);
+            foreach ($aggregateValues as $index => $value) {
+                $columnIndex = count($columns) - count($aggregateValues) + $index;
+                if ($columnIndex >= 0) {
+                    $footer[$columnIndex] = $value;
+                }
             }
             $rows->push($footer);
         }
@@ -93,7 +92,7 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
 
     public function headings(): array
     {
-        return array_map(fn ($col) => $col['label'] ?? ucfirst($col['field'] ?? '')), $this->result->columns);
+        return array_map(fn ($col) => $col['label'] ?? ucfirst($col['field'] ?? ''), $this->result->columns);
     }
 
     public function title(): string

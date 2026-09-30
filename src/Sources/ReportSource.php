@@ -100,9 +100,13 @@ abstract class ReportSource implements ReportSourceContract
      * resolvers (filters/formulas) can use them, but renderers MUST skip them
      * unless explicitly required by an aggregate/internal reference.
      */
-    public function field(string $key): ?ReportField
+    public function field(string $key, ?string $label = null, string $type = 'string', ...$with): ?ReportField
     {
-        return $this->fields()->get($key);
+        if ($label === null) {
+            return $this->fields()->get($key);
+        }
+
+        return new ReportField($key, $label, $type, ...$with);
     }
 
     /**
@@ -120,15 +124,9 @@ abstract class ReportSource implements ReportSourceContract
     |--------------------------------------------------------------------------
     */
 
-    /** @param array<string,mixed> ...$with */
-    protected function field(string $key, string $label, string $type = 'string', ...$with): ReportField
-    {
-        return new ReportField(key: $key, label: $label, type: $type, ...$with);
-    }
-
     protected function param(string $name, string $type = 'string', bool $required = false, ...$with): ReportParameter
     {
-        return new ReportParameter(name: $name, type: $type, required: $required, ...$with);
+        return new ReportParameter($name, $type, $required, ...$with);
     }
 
     /**

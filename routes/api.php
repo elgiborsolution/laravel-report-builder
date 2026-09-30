@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use ElgiborSolution\AdvancedReports\Http\Middleware\RegisterConnectedDynamicSources;
 
 /**
  * API routes for ElgiborSolution Advanced Reports.
@@ -15,7 +16,10 @@ $middleware = config('advanced-reports.routes.api.middleware', ['api']);
 $prefix = config('advanced-reports.routes.api.prefix', 'api/advanced-reports');
 
 Route::prefix($prefix)
-    ->middleware($middleware)
+    // Run after the host application's configured middleware (including
+    // tenancy initialization) so every request receives a rehydrated
+    // process-local SourceRegistry before a controller resolves a key.
+    ->middleware([...$middleware, RegisterConnectedDynamicSources::class])
     ->namespace('ElgiborSolution\\AdvancedReports\\Http\\Controllers')
     ->group(function () {
 

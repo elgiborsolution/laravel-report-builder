@@ -78,11 +78,11 @@ final class FieldTypeOperatorMap
 
     /** @var array<string, array<int, string>> */
     private const AGGREGATES = [
-        'string' => ['count', 'count_distinct'],
-        'integer' => ['sum', 'avg', 'min', 'max', 'count', 'count_distinct'],
-        'decimal' => ['sum', 'avg', 'min', 'max', 'count', 'count_distinct'],
-        'date' => ['min', 'max', 'count'],
-        'datetime' => ['min', 'max', 'count'],
+        'string' => ['count'],
+        'integer' => ['count', 'sum', 'avg', 'min', 'max'],
+        'decimal' => ['count', 'sum', 'avg', 'min', 'max'],
+        'date' => ['count'],
+        'datetime' => ['count'],
         'boolean' => ['count'],
         'json' => ['count'],
     ];

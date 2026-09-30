@@ -44,6 +44,11 @@ interface ReportSourceContract
     public function fields(): Collection;
 
     /**
+     * Look up metadata for a declared source field.
+     */
+    public function field(string $key): ?ReportField;
+
+    /**
      * The parameters this source accepts (used by the validator).
      *
      * @return Collection<string, ReportParameter>

@@ -34,6 +34,7 @@ class ReportPreviewController
         $definition = $this->buildLimitedDefinition($report->definition ?? [], self::PREVIEW_LIMIT);
 
         try {
+            $this->manager->validateDefinition($definition, $parameters);
             $result = $this->manager->engine()->run(
                 report: $report,
                 definition: $definition,
@@ -89,6 +90,7 @@ class ReportPreviewController
         $definition = $this->buildLimitedDefinition($definitionData, self::PREVIEW_LIMIT);
 
         try {
+            $this->manager->validateDefinition($definition, $parameters);
             $result = $this->manager->engine()->run(
                 report: $tempReport,
                 definition: $definition,
