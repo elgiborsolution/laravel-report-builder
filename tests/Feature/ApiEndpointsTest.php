@@ -42,6 +42,17 @@ it('returns a full source schema', function () {
         ]);
 });
 
+it('returns the field capability contract used by every designer panel', function () {
+    $this->getJson('/api/advanced-reports/sources/sales_orders/designer-schema')
+        ->assertOk()
+        ->assertJsonPath('source.key', 'sales_orders')
+        ->assertJsonPath('fields.0.key', 'order_number')
+        ->assertJsonPath('fields.0.sortable', true)
+        ->assertJsonPath('fields.0.filterable', true)
+        ->assertJsonPath('suggested_aggregates.total_amount', ['count', 'sum', 'avg', 'min', 'max'])
+        ->assertJsonPath('suggested_aggregates.order_number', ['count']);
+});
+
 it('returns 404 for unregistered source schema', function () {
     $this->getJson('/api/advanced-reports/sources/nope/schema')->assertNotFound();
 });

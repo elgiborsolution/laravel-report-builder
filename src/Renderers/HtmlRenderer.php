@@ -9,6 +9,7 @@ use ElgiborSolution\AdvancedReports\Engine\DrilldownResolver;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Support\Formatter;
 use ElgiborSolution\AdvancedReports\Support\PresentationTableRows;
+use ElgiborSolution\AdvancedReports\Support\SummaryRowLayout;
 use ElgiborSolution\AdvancedReports\Support\ValueResolver;
 
 /**
@@ -122,6 +123,28 @@ final class HtmlRenderer implements ReportRenderer
             if (($presentationRow['type'] ?? null) === 'detail') {
                 $presentationRow['row'] = $formattedRows[$presentationRow['row_index'] ?? -1] ?? [];
                 continue;
+            }
+
+            if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)) {
+                // Resolved from raw values; aggregate_cells is formatted below
+                // only for published views that still read it directly.
+                $presentationRow['summary'] = PresentationTableRows::summary(
+                    $presentationRow,
+                    $result->columns,
+                    $this->formatter,
+                    $result->definition->aggregates,
+                    $result->layout,
+                );
+                // Each cell carries the presentation of the aggregate it shows.
+                foreach ($presentationRow['summary']['segments'] as &$segment) {
+                    $segment['css'] = SummaryRowLayout::css($segment['style'], $segment['align']);
+                }
+                unset($segment);
+                if ($presentationRow['summary']['label_row'] !== null) {
+                    $labelRow = &$presentationRow['summary']['label_row'];
+                    $labelRow['css'] = SummaryRowLayout::css($labelRow['style'], $labelRow['align']);
+                    unset($labelRow);
+                }
             }
 
             if (isset($presentationRow['aggregate_cells']) && is_array($presentationRow['aggregate_cells'])) {

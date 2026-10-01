@@ -114,7 +114,7 @@ it('renders grouping events consistently and aligns group totals to their source
 
     $html = AdvancedReports::render('grouped_sales_output', 'html');
     expect($html)->toContain('Customer: Acme')
-        ->and($html)->toContain('Subtotal: Customer — Acme')
+        ->and($html)->toContain('>Subtotal<')->and($html)->not->toContain('Subtotal: Customer')
         ->and($html)->toContain('Grand total');
 
     $csvResponse = AdvancedReports::render('grouped_sales_output', 'csv');
@@ -125,7 +125,7 @@ it('renders grouping events consistently and aligns group totals to their source
         static fn (string $line) => str_getcsv($line),
         array_values(array_filter(preg_split('/\\r\\n|\\r|\\n/', trim($csv)) ?: [])),
     );
-    $csvSubtotal = collect($csvRows)->first(static fn (array $row) => str_starts_with((string) ($row[0] ?? ''), 'Subtotal: Customer — Acme'));
+    $csvSubtotal = collect($csvRows)->first(static fn (array $row) => ($row[0] ?? '') === 'Subtotal');
     $csvGrandTotal = collect($csvRows)->first(static fn (array $row) => ($row[0] ?? '') === 'Grand total');
     expect($csvSubtotal[1])->toBe('6000')
         ->and($csvGrandTotal[1])->toBe('8000');
@@ -143,7 +143,7 @@ it('renders grouping events consistently and aligns group totals to their source
     $property->setAccessible(true);
     $property->setValue($excel, $result);
     $excelRows = $excel->collection();
-    $excelSubtotal = $excelRows->first(static fn (array $row) => str_starts_with((string) ($row[0] ?? ''), 'Subtotal: Customer — Acme'));
+    $excelSubtotal = $excelRows->first(static fn (array $row) => ($row[0] ?? '') === 'Subtotal');
     $excelGrandTotal = $excelRows->first(static fn (array $row) => ($row[0] ?? '') === 'Grand total');
     expect($excelSubtotal[1])->toBe(6000.0)
         ->and($excelGrandTotal[1])->toBe(8000.0);
@@ -152,22 +152,25 @@ it('renders grouping events consistently and aligns group totals to their source
 it('preserves average precision for integer fields in presentation cells', function () {
     $row = [
         'type' => 'group_subtotal',
-        'label' => 'Subtotal: Quantity',
+        'label' => 'Subtotal',
         'aggregate_cells' => [
-            'quantity' => [['label' => 'Average quantity', 'function' => 'avg', 'value' => 1.5]],
+            'quantity' => [['index' => 0, 'label' => 'Average quantity', 'function' => 'avg', 'value' => 1.5]],
         ],
     ];
+    $aggregates = [['field' => 'quantity', 'function' => 'avg', 'label' => 'Average quantity']];
 
     $cells = PresentationTableRows::cells(
         $row,
         collect(),
         [['field' => 'quantity', 'format' => 'integer']],
         new Formatter(),
+        $aggregates,
     );
 
+    // The only column holds the value, so the label moves to its own row.
     expect($cells[0])->toBe(1.5)
-        ->and(PresentationTableRows::hasLabelCell($row, [['field' => 'quantity']]))->toBeFalse()
-        ->and(PresentationTableRows::labelCells($row, [['field' => 'quantity']]))->toBe(['Subtotal: Quantity']);
+        ->and(PresentationTableRows::hasLabelCell($row, [['field' => 'quantity']], $aggregates))->toBeFalse()
+        ->and(PresentationTableRows::labelCells($row, [['field' => 'quantity']], $aggregates))->toBe(['Subtotal']);
 });
 
 it('exports selected formula columns to CSV and XLSX in matching order', function () {

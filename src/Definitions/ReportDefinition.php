@@ -50,7 +50,7 @@ final class ReportDefinition
     {
         return new self(
             name: (string) ($data['name'] ?? ''),
-            dataSource: (string) ($data['data_source'] ?? $data['dataSource'] ?? ''),
+            dataSource: self::canonicalSourceKey((string) ($data['data_source'] ?? $data['dataSource'] ?? '')),
             parameters: $data['parameters'] ?? [],
             columns: $data['columns'] ?? [],
             filters: $data['filters'] ?? [],
@@ -64,6 +64,18 @@ final class ReportDefinition
             layout: $data['layout'] ?? null,
             meta: $data['meta'] ?? [],
         );
+    }
+
+    /**
+     * Earlier designer versions saved a connected Data Source by its bare ID
+     * ("12"); the registry knows it as "dynamic:12". Registered source keys
+     * are identifiers, never all digits, so this cannot shadow one.
+     */
+    public static function canonicalSourceKey(string $key): string
+    {
+        $key = trim($key);
+
+        return ctype_digit($key) ? 'dynamic:'.$key : $key;
     }
 
     /** @return array<string,mixed> */

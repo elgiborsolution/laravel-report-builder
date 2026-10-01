@@ -30,3 +30,14 @@ it('registers an instance under an override key', function () {
 it('throws when getting an unregistered source', function () {
     app(SourceRegistry::class)->get('nope');
 })->throws(\ElgiborSolution\AdvancedReports\Exceptions\SourceNotRegisteredException::class);
+
+it('resolves report definitions saved with a bare Data Source ID to the dynamic source key', function () {
+    $legacy = \ElgiborSolution\AdvancedReports\Definitions\ReportDefinition::fromArray(['name' => 'Legacy', 'data_source' => '12']);
+    $current = \ElgiborSolution\AdvancedReports\Definitions\ReportDefinition::fromArray(['name' => 'Current', 'data_source' => 'dynamic:12']);
+    $builtin = \ElgiborSolution\AdvancedReports\Definitions\ReportDefinition::fromArray(['name' => 'Builtin', 'data_source' => 'sales_orders']);
+
+    expect($legacy->dataSource)->toBe('dynamic:12')
+        ->and($legacy->toArray()['data_source'])->toBe('dynamic:12')
+        ->and($current->dataSource)->toBe('dynamic:12')
+        ->and($builtin->dataSource)->toBe('sales_orders');
+});

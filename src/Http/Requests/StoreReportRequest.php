@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElgiborSolution\AdvancedReports\Http\Requests;
 
 use ElgiborSolution\AdvancedReports\Sources\SourceRegistry;
+use ElgiborSolution\AdvancedReports\Support\SummaryRowLayout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -39,6 +40,9 @@ class StoreReportRequest extends FormRequest
             'definition.formulas.*.type' => ['nullable', 'string'],
             'definition.formulas.*.format' => ['nullable', 'string'],
             'definition.drilldowns' => ['nullable', 'array'],
+            // No nested rules: Laravel would otherwise drop unlisted layout keys
+            // from validated(). Summary settings are checked in withValidator().
+            'definition.layout' => ['nullable', 'array'],
             'is_public' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
         ];
@@ -48,6 +52,10 @@ class StoreReportRequest extends FormRequest
     {
         $validator->after(function (Validator $validator): void {
             $definition = (array) $this->input('definition', []);
+            foreach (SummaryRowLayout::validationErrors($definition['layout'] ?? null, $definition['aggregates'] ?? null) as $path => $message) {
+                $validator->errors()->add("definition.{$path}", $message);
+            }
+
             $sourceKey = $definition['data_source'] ?? $this->input('data_source');
             if (! $sourceKey || ! app(SourceRegistry::class)->has($sourceKey)) {
                 return;

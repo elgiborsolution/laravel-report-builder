@@ -9,6 +9,7 @@ use ElgiborSolution\AdvancedReports\Exceptions\DefinitionInvalidException;
 use ElgiborSolution\AdvancedReports\Exceptions\SourceNotRegisteredException;
 use ElgiborSolution\AdvancedReports\Sources\SourceRegistry;
 use ElgiborSolution\AdvancedReports\Support\Operators;
+use ElgiborSolution\AdvancedReports\Support\SummaryRowLayout;
 
 /**
  * Validates a ReportDefinition against its declared source. Collects all
@@ -49,6 +50,10 @@ final class ReportDefinitionValidator
             $this->validateSorts($definition);
             $this->validateFormulas($definition);
             $this->validateDrilldowns($definition);
+        }
+
+        foreach (SummaryRowLayout::validationErrors($definition->layout, $definition->aggregates) as $error) {
+            $this->errors[] = $error;
         }
 
         if ($this->errors) {

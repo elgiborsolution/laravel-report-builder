@@ -182,7 +182,10 @@ final class GroupResolver
                         'type' => 'group_subtotal',
                         'key' => $node['key'],
                         'field' => $node['field'],
-                        'label' => 'Subtotal: '.$node['label'].' — '.$node['display_value'],
+                        // The group is already named by its header row, so the
+                        // subtotal shows a plain label; group_label/display_value
+                        // stay available for API consumers.
+                        'label' => 'Subtotal',
                         'group_label' => $node['label'],
                         'group_value' => $node['value'],
                         'display_value' => $node['display_value'],
@@ -226,12 +229,17 @@ final class GroupResolver
         return $presentationRows;
     }
 
-    /** @return array<string,array<int,array{label:string,function:string,value:mixed}>> */
+    /**
+     * `index` identifies the aggregate definition so summary layouts can move
+     * a value to another column without matching on (possibly duplicate) labels.
+     *
+     * @return array<string,array<int,array{index:int,label:string,function:string,value:mixed}>>
+     */
     private function aggregateCells(array $values, array $definitions): array
     {
         $cells = [];
 
-        foreach ($definitions as $aggregate) {
+        foreach (array_values($definitions) as $index => $aggregate) {
             $field = $aggregate['field'] ?? null;
             if (! $field) {
                 continue;
@@ -244,6 +252,7 @@ final class GroupResolver
             }
 
             $cells[$field][] = [
+                'index' => $index,
                 'label' => $label,
                 'function' => $function,
                 'value' => $values[$label],

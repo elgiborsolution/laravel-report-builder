@@ -66,11 +66,11 @@ final class CsvRenderer implements ReportRenderer
                         continue;
                     }
 
-                    if (! PresentationTableRows::hasLabelCell($presentationRow, $columns)) {
-                        fputcsv($handle, PresentationTableRows::labelCells($presentationRow, $columns), $delimiter, $enclosure, $escape);
+                    if (! PresentationTableRows::hasLabelCell($presentationRow, $columns, $result->definition->aggregates, $result->layout)) {
+                        fputcsv($handle, PresentationTableRows::labelCells($presentationRow, $columns, $result->definition->aggregates, $result->layout), $delimiter, $enclosure, $escape);
                     }
 
-                    fputcsv($handle, PresentationTableRows::cells($presentationRow, collect(), $columns, $this->formatter), $delimiter, $enclosure, $escape);
+                    fputcsv($handle, PresentationTableRows::cells($presentationRow, collect(), $columns, $this->formatter, $result->definition->aggregates, $result->layout), $delimiter, $enclosure, $escape);
                 }
             } else {
                 $details = $result->rows instanceof \Illuminate\Support\LazyCollection
@@ -83,11 +83,11 @@ final class CsvRenderer implements ReportRenderer
                     }
 
                     if (in_array($presentationRow['type'] ?? null, ['group_subtotal', 'grand_total'], true)
-                        && ! PresentationTableRows::hasLabelCell($presentationRow, $columns)) {
-                        fputcsv($handle, PresentationTableRows::labelCells($presentationRow, $columns), $delimiter, $enclosure, $escape);
+                        && ! PresentationTableRows::hasLabelCell($presentationRow, $columns, $result->definition->aggregates, $result->layout)) {
+                        fputcsv($handle, PresentationTableRows::labelCells($presentationRow, $columns, $result->definition->aggregates, $result->layout), $delimiter, $enclosure, $escape);
                     }
 
-                    $cells = PresentationTableRows::cells($presentationRow, $details, $columns, $this->formatter);
+                    $cells = PresentationTableRows::cells($presentationRow, $details, $columns, $this->formatter, $result->definition->aggregates, $result->layout);
                     fputcsv($handle, $cells, $delimiter, $enclosure, $escape);
                 }
             }

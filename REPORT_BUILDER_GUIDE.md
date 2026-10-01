@@ -149,6 +149,32 @@ The validator runs only during `AdvancedReportsManager::run()`, not report creat
 
 The designer schema’s `FieldTypeOperatorMap` still advertises symbolic filter aliases such as `contains`, `equals`, and `greater_than`, whereas execution validation accepts the `Operators` SQL-style catalog above. Aggregate suggestions are field-keyed: `count` is available for every visible field, while `sum`, `avg`, `min`, and `max` require an aggregatable numeric field. The validator enforces the same capability/type rule.
 
+### Summary rows (subtotal / grand total output)
+
+Each aggregate owns its presentation in `aggregates[].output`. These settings apply wherever that aggregate's result appears: every group subtotal and the grand total. Grouping only decides the calculation scope, and output settings never change how values are calculated. Each `aggregate_cells` entry carries `index`, the aggregate's position in `definition.aggregates`.
+
+`Support\SummaryRowLayout` resolves placement for HTML/PDF, XLSX and CSV. `report-summary-layout.ts` in the Angular designer mirrors it. In the designer, the settings are under **Grouping → Aggregates → Output** for each entry. All settings are optional:
+
+```json
+{ "field": "total_amount", "function": "sum", "label": "Total",
+  "output": {
+    "column": "@last",
+    "align": "right",
+    "format": "currency",
+    "style": { "bold": true, "text_color": "#92400e", "background_color": "#fef3c7",
+               "border_style": "double", "border_position": "top", "border_color": "#1f2937" },
+    "label": { "show": true, "text": "Total", "column": "order_number", "colspan": 2, "align": "center" }
+  } }
+```
+
+- **Values:** a value goes to `output.column`. That can be a field or `"@last"`, which means the rightmost displayed column and follows column reordering. If the target is unset, removed or not displayed, the value goes to its own field. Values that share a column are joined as `Label: value | …` and use the first aggregate's style.
+- **Format:** if `format` is empty, it comes from the source field: `count` is always whole, and the average of an integer field keeps its decimals.
+- **Labels:** labels are placed in aggregate order. Each goes in its own `label.column` if that column is free, otherwise in the first free column. A span grows only across columns without a value or another label, and stops at the last column. The resulting cells cover every column once, so they never overlap. Labels that find no free column are shown on their own row. If the label text is empty, the row name is shown instead: `Subtotal` or `Grand total`.
+- **Styles:** settings are sanitized. Colors must be hex values, and the other options must be in their allowed lists. `SummaryRowLayout::validationErrors()` reports invalid shapes through `ReportDefinitionValidator` and the store/update requests. Unknown column references are not errors, because they fall back as described above.
+- **Migration:** aggregates without `output` take their settings from the earlier `layout.summary.{subtotal,grand_total}` and `aggregates[].summary_columns`. The row label moves to the first aggregate, and the subtotal settings win over the grand-total ones. With no settings at all, reports render as before. The designer writes the migrated shape the next time the report is saved.
+- **Output:** XLSX merges spanned label cells and maps font, fill, alignment, borders and number formats. CSV has no merges: the label is written to the first column of its span, and the other spanned columns stay empty.
+- **Persistence:** the store/update requests declare `definition.layout` without nested rules, because Laravel's `validated()` drops any nested keys that have no rule. `definition.aggregates` is kept whole, so `output` persists.
+
 ### Formulas and calculated fields
 
 `SafeExpressionEvaluator` wraps Symfony ExpressionLanguage (no PHP `eval`), normalizes dotted **top-level keys** from `customer.name` to `customer_name`, and exposes `now`, `date`, `round`, `abs`, `int`, `float`, `string`, `sum`, `avg`, `min`, and `max`. It evaluates each formula in definition order against the row; errors are swallowed and assign `null`.
