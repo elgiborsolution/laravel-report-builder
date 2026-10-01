@@ -51,10 +51,13 @@ final class ReportEngine
         $this->dynamicSources->ensureRegistered($definition->dataSource);
         $source = $this->sources->get($definition->dataSource);
 
-        // Persist a run record up-front so failures are still auditable.
-        $run = $this->createRun($report, $parameters, $user);
-        $this->events->dispatch(new ReportRunning($report, $run, $parameters));
-        $run->markStarted();
+        // Inline designer previews have no persisted report ID and therefore
+        // cannot own a run-history row. Saved reports retain their audit trail.
+        $run = $report->exists ? $this->createRun($report, $parameters, $user) : null;
+        if ($run) {
+            $this->events->dispatch(new ReportRunning($report, $run, $parameters));
+            $run->markStarted();
+        }
 
         try {
             // 1. Resolve parameters (defaults + token substitution + type coercion).
@@ -113,24 +116,28 @@ final class ReportEngine
                 conditionalFormatting: $definition->conditionalFormatting,
                 layout: $definition->layout,
                 metadata: [
-                    'run_id' => $run->id,
+                    'run_id' => $run?->id,
                     'row_count' => $rowCount,
                 ],
                 presentationRows: $presentationRows,
             );
 
-            $run->markCompleted($rowCount, ['aggregates' => $aggregates]);
+            if ($run) {
+                $run->markCompleted($rowCount, ['aggregates' => $aggregates]);
 
-            if (config('advanced-reports.history.auto_snapshot', false)) {
-                $this->persistSnapshot($report, $run, $result);
+                if (config('advanced-reports.history.auto_snapshot', false)) {
+                    $this->persistSnapshot($report, $run, $result);
+                }
+
+                $this->events->dispatch(new ReportCompleted($report, $run, $result));
             }
-
-            $this->events->dispatch(new ReportCompleted($report, $run, $result));
 
             return $result;
         } catch (\Throwable $e) {
-            $run->markFailed($e->getMessage());
-            $this->events->dispatch(new ReportFailed($report, $run, $e));
+            if ($run) {
+                $run->markFailed($e->getMessage());
+                $this->events->dispatch(new ReportFailed($report, $run, $e));
+            }
 
             throw $e;
         }

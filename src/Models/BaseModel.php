@@ -16,13 +16,11 @@ abstract class BaseModel extends Model
     /** @param array<string,mixed> $attributes */
     public function setRawAttributes(array $attributes, $sync = false): static
     {
-        // Normalize JSON attributes (some drivers return strings).
+        // Eloquent JSON casts expect raw JSON strings. Some drivers may return
+        // decoded arrays, so encode those before handing attributes to Eloquent.
         foreach ($this->getJsonCastAttributes() as $attr) {
-            if (isset($attributes[$attr]) && is_string($attributes[$attr])) {
-                $decoded = json_decode($attributes[$attr], true);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    $attributes[$attr] = $decoded;
-                }
+            if (isset($attributes[$attr]) && is_array($attributes[$attr])) {
+                $attributes[$attr] = json_encode($attributes[$attr], JSON_THROW_ON_ERROR);
             }
         }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ElgiborSolution\AdvancedReports\Facades\AdvancedReports;
 use ElgiborSolution\AdvancedReports\Http\Controllers\ReportController;
+use ElgiborSolution\AdvancedReports\Models\ReportRun;
 use ElgiborSolution\AdvancedReports\Tests\Fixtures\SalesOrderReportSource;
 use ElgiborSolution\AdvancedReports\Tests\TestCase;
 
@@ -46,7 +47,7 @@ it('returns 404 for unregistered source schema', function () {
 });
 
 it('runs a report through the API and returns metadata', function () {
-    \ElgiborSolution\AdvancedReports\Models\Report::create([
+    $report = \ElgiborSolution\AdvancedReports\Models\Report::create([
         'name' => 'Sales',
         'code' => 'api_sales',
         'data_source' => 'sales_orders',
@@ -59,7 +60,7 @@ it('runs a report through the API and returns metadata', function () {
         'is_public' => true,
     ]);
 
-    $this->postJson('/api/advanced-reports/reports/api_sales/run', [
+    $this->postJson('/api/advanced-reports/reports/'.$report->uuid.'/run', [
         'format' => 'json',
     ])
         ->assertOk()
@@ -69,7 +70,7 @@ it('runs a report through the API and returns metadata', function () {
 it('returns separate detail rows and grouping presentation events for designer preview', function () {
     $response = $this->postJson('/api/advanced-reports/reports/preview-inline', [
         'definition' => [
-            'name' => 'Grouped Preview',
+            'name' => '', // A new designer report can be previewed before it is named.
             'data_source' => 'sales_orders',
             'columns' => [
                 ['field' => 'order_number', 'label' => 'Order'],
@@ -92,5 +93,64 @@ it('returns separate detail rows and grouping presentation events for designer p
     expect($response->json('rows'))->toHaveCount(3)
         ->and($detailRows)->toHaveCount(3)
         ->and($detailRows[0])->toHaveKey('row_index', 0)
-        ->and($types)->toContain('group_header', 'group_subtotal', 'grand_total');
+        ->and($types)->toContain('group_header', 'group_subtotal', 'grand_total')
+        ->and(ReportRun::count())->toBe(0);
+});
+
+it('keeps run history for a saved report preview', function () {
+    $report = \ElgiborSolution\AdvancedReports\Models\Report::create([
+        'name' => 'Saved Preview',
+        'code' => 'saved_preview',
+        'data_source' => 'sales_orders',
+        'definition' => [
+            'name' => 'Saved Preview',
+            'data_source' => 'sales_orders',
+            'columns' => [['field' => 'total_amount', 'label' => 'Amount']],
+            'aggregates' => [['field' => 'total_amount', 'function' => 'sum', 'label' => 'Total']],
+        ],
+        'is_active' => true,
+        'is_public' => true,
+    ]);
+
+    $this->postJson('/api/advanced-reports/reports/'.$report->uuid.'/preview')
+        ->assertOk()
+        ->assertJsonPath('aggregates.Total', 8000);
+
+    expect(ReportRun::count())->toBe(1);
+});
+
+it('reloads saved grouping and aggregate definitions for the viewer', function () {
+    $definition = [
+        'name' => 'Saved Grouping',
+        'data_source' => 'sales_orders',
+        'columns' => [['field' => 'total_amount', 'label' => 'Amount']],
+        'groups' => [
+            ['field' => 'customer_name', 'label' => 'Customer'],
+            ['field' => 'order_date', 'label' => 'Date'],
+        ],
+        'aggregates' => [['field' => 'total_amount', 'function' => 'sum', 'label' => 'Total']],
+    ];
+
+    $stored = $this->postJson('/api/advanced-reports/reports', [
+        'name' => 'Saved Grouping',
+        'code' => 'saved_grouping',
+        'data_source' => 'sales_orders',
+        'definition' => $definition,
+        'is_public' => true,
+        'is_active' => true,
+    ])->assertSuccessful();
+
+    $uuid = $stored->json('data.uuid');
+    $this->getJson('/api/advanced-reports/reports/'.$uuid)
+        ->assertOk()
+        ->assertJsonPath('data.definition.groups', $definition['groups'])
+        ->assertJsonPath('data.definition.aggregates', $definition['aggregates']);
+
+    $definition['groups'] = array_reverse($definition['groups']);
+    $definition['aggregates'][0]['label'] = 'Updated total';
+    $this->putJson('/api/advanced-reports/reports/'.$uuid, ['definition' => $definition])->assertOk();
+    $this->getJson('/api/advanced-reports/reports/'.$uuid)
+        ->assertOk()
+        ->assertJsonPath('data.definition.groups', $definition['groups'])
+        ->assertJsonPath('data.definition.aggregates', $definition['aggregates']);
 });

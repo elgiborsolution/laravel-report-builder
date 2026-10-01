@@ -80,7 +80,12 @@ class ReportPreviewController
             'parameters' => ['sometimes', 'array'],
         ]);
 
-        $definitionData = (array) $validated['definition'];
+        // Nested validation only returns the validated data_source key; retain
+        // the full definition (groups, aggregates, columns, formulas, etc.).
+        $definitionData = (array) $request->input('definition', []);
+        if (trim((string) ($definitionData['name'] ?? '')) === '') {
+            $definitionData['name'] = 'Inline Preview';
+        }
         $parameters = (array) ($validated['parameters'] ?? []);
 
         // Build a temporary Report model (not persisted) for the engine.
