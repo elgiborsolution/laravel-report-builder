@@ -161,6 +161,8 @@ final class AdvancedReportsManager
 
         $this->authorize('export', $report, $user);
 
+        $this->validateDefinition($this->definition($report->definition), $parameters);
+
         return $this->exports->queue($report, $format, $parameters, $options, $user);
     }
 

@@ -22,6 +22,10 @@ beforeEach(function () {
         'definition' => [
             'name' => 'Exportable',
             'data_source' => 'sales_orders',
+            'parameters' => [
+                ['name' => 'date_from', 'default' => '2026-01-01'],
+                ['name' => 'date_to', 'default' => '2026-12-31'],
+            ],
             'columns' => [
                 ['field' => 'order_number', 'label' => 'Order'],
                 ['field' => 'total_amount', 'label' => 'Amount'],

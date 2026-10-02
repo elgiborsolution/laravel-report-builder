@@ -15,7 +15,7 @@ use Illuminate\Auth\Access\HandlesAuthorization;
  *  - view:   public reports or reports with explicit user/role permission.
  *  - edit:   creator or explicit permission.
  *  - run:    view + run permission.
- *  - export:  view + export permission.
+ *  - export: creator or view + export permission.
  *  - delete: creator or explicit delete permission.
  */
 class ReportPolicy
@@ -56,6 +56,10 @@ class ReportPolicy
 
     public function export(?object $user, Report $report): bool
     {
+        if ($report->created_by && $user?->getAuthIdentifier() == $report->created_by) {
+            return true;
+        }
+
         if (! $this->view($user, $report)) {
             return false;
         }

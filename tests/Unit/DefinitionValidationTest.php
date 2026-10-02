@@ -51,7 +51,7 @@ it('allows count on any valid field and numeric aggregates on decimal fields', f
         ],
     ]);
 
-    app(ReportDefinitionValidator::class)->validate($def);
+    app(ReportDefinitionValidator::class)->validate($def, ['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
 
     expect(true)->toBeTrue();
 });
@@ -88,7 +88,7 @@ it('rejects columns referencing unknown fields', function () {
     ]);
 
     try {
-        app(ReportDefinitionValidator::class)->validate($def, []);
+        app(ReportDefinitionValidator::class)->validate($def, ['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
         $this->fail('Expected DefinitionInvalidException');
     } catch (DefinitionInvalidException $e) {
         expect($e->errors)->toHaveKey(0)
@@ -113,7 +113,7 @@ it('accepts a formula as a report column', function () {
         ]],
     ]);
 
-    app(ReportDefinitionValidator::class)->validate($def);
+    app(ReportDefinitionValidator::class)->validate($def, ['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
 
     expect(true)->toBeTrue();
 });
@@ -220,4 +220,17 @@ it('accepts false and zero as provided required parameter values', function () {
     ]);
 
     expect(true)->toBeTrue();
+});
+
+it('validates the resolved value of saved parameter default bindings', function () {
+    $def = ReportDefinition::fromArray([
+        'name' => 'Bound dates', 'data_source' => 'sales_orders',
+        'parameters' => [['name' => 'date_from', 'default' => '{{param.start_date}}']],
+    ]);
+    app(ReportDefinitionValidator::class)->validate($def, [
+        'start_date' => '2026-01-01', 'date_to' => '2026-12-31',
+    ]);
+
+    expect(fn () => app(ReportDefinitionValidator::class)->validate($def, ['date_to' => '2026-12-31']))
+        ->toThrow(DefinitionInvalidException::class, 'Parameter [date_from] is required.');
 });

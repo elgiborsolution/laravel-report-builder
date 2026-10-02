@@ -67,6 +67,10 @@ beforeEach(function () use ($columns) {
             'definition' => [
                 'name' => 'Summary '.$code,
                 'data_source' => 'sales_orders',
+                'parameters' => [
+                    ['name' => 'date_from', 'default' => '2026-01-01'],
+                    ['name' => 'date_to', 'default' => '2026-12-31'],
+                ],
                 'columns' => $columns,
                 'groups' => [['field' => 'customer_name', 'label' => 'Customer']],
                 'aggregates' => $aggregates,

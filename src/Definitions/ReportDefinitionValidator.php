@@ -11,6 +11,8 @@ use ElgiborSolution\AdvancedReports\Exceptions\SourceNotRegisteredException;
 use ElgiborSolution\AdvancedReports\Sources\SourceRegistry;
 use ElgiborSolution\AdvancedReports\Support\Operators;
 use ElgiborSolution\AdvancedReports\Support\SummaryRowLayout;
+use ElgiborSolution\AdvancedReports\Support\ValueResolver;
+use Illuminate\Support\Facades\Validator;
 
 /**
  * Validates a ReportDefinition against its declared source. Collects all
@@ -119,13 +121,31 @@ final class ReportDefinitionValidator
             $declarations[$name] = $p;
         }
 
+        $resolver = new ValueResolver($values);
         foreach ($declarations as $name => $parameter) {
             $value = array_key_exists($name, $values)
                 ? $values[$name]
                 : ($parameter['default'] ?? null);
+            $value = $resolver->resolve($value);
             $required = (bool) ($parameter['required'] ?? false);
             if ($required && ($value === null || $value === '')) {
                 $this->errors[] = "Parameter [{$name}] is required.";
+            }
+
+            if ($value !== null && $value !== '') {
+                $type = $parameter['type'] ?? 'string';
+                $validType = match ($type) {
+                    'integer' => filter_var($value, FILTER_VALIDATE_INT) !== false,
+                    'decimal' => is_scalar($value) && is_numeric($value),
+                    'boolean' => is_scalar($value) && filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) !== null,
+                    'date', 'datetime' => Validator::make(['value' => $value], ['value' => 'date'])->passes(),
+                    'array' => is_array($value),
+                    'string' => is_scalar($value),
+                    default => true,
+                };
+                if (! $validType) {
+                    $this->errors[] = "Parameter [{$name}] must be of type [{$type}].";
+                }
             }
 
             $allowed = $parameter['allowed_values'] ?? $parameter['allowedValues'] ?? null;
