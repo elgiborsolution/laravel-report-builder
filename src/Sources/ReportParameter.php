@@ -20,6 +20,9 @@ final class ReportParameter
         public readonly mixed $default = null,
         public readonly ?array $allowedValues = null,
         public readonly ?string $description = null,
+        public readonly ?string $label = null,
+        public readonly ?string $format = null,
+        public readonly ?string $operator = null,
     ) {}
 
     /** @param array<string,mixed> $data */
@@ -32,13 +35,16 @@ final class ReportParameter
             default: $data['default'] ?? null,
             allowedValues: $data['allowed_values'] ?? $data['allowedValues'] ?? null,
             description: $data['description'] ?? null,
+            label: $data['label'] ?? null,
+            format: $data['format'] ?? null,
+            operator: $data['operator'] ?? null,
         );
     }
 
     /** @return array<string,mixed> */
     public function toArray(): array
     {
-        return [
+        $data = [
             'name' => $this->name,
             'type' => $this->type,
             'required' => $this->required,
@@ -46,5 +52,17 @@ final class ReportParameter
             'allowed_values' => $this->allowedValues,
             'description' => $this->description,
         ];
+
+        if ($this->label !== null && $this->label !== '') {
+            $data['label'] = $this->label;
+        }
+        if ($this->format !== null && $this->format !== '') {
+            $data['format'] = $this->format;
+        }
+        if ($this->operator !== null && $this->operator !== '') {
+            $data['operator'] = $this->operator;
+        }
+
+        return $data;
     }
 }

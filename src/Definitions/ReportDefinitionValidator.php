@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElgiborSolution\AdvancedReports\Definitions;
 
 use ElgiborSolution\AdvancedReports\Contracts\ExpressionEvaluator;
+use ElgiborSolution\AdvancedReports\Contracts\ReportSourceContract;
 use ElgiborSolution\AdvancedReports\Exceptions\DefinitionInvalidException;
 use ElgiborSolution\AdvancedReports\Exceptions\SourceNotRegisteredException;
 use ElgiborSolution\AdvancedReports\Sources\SourceRegistry;
@@ -42,7 +43,7 @@ final class ReportDefinitionValidator
         // The source must exist before we can validate field references.
         if ($this->sources->has($definition->dataSource)) {
             $source = $this->sources->get($definition->dataSource);
-            $this->validateParameters($definition, $parameters);
+            $this->validateParameters($source, $definition, $parameters);
             $this->validateColumns($definition);
             $this->validateFilters($definition);
             $this->validateGroups($definition);
@@ -87,8 +88,18 @@ final class ReportDefinitionValidator
         }
     }
 
-    protected function validateParameters(ReportDefinition $d, array $values): void
+    protected function validateParameters(ReportSourceContract $source, ReportDefinition $d, array $values): void
     {
+        $declarations = [];
+
+        foreach ($source->parameters() as $parameter) {
+            $data = $parameter->toArray();
+            $name = (string) ($data['name'] ?? '');
+            if ($name !== '') {
+                $declarations[$name] = $data;
+            }
+        }
+
         foreach ($d->parameters as $p) {
             $name = $p['name'] ?? null;
             if (! $name) {
@@ -96,13 +107,28 @@ final class ReportDefinitionValidator
                 continue;
             }
 
-            $value = $values[$name] ?? $p['default'] ?? null;
-            $required = (bool) ($p['required'] ?? false);
+            if (array_key_exists($name, $declarations)) {
+                // Source metadata owns type/required/options; report
+                // definitions can persist only their default binding.
+                if (array_key_exists('default', $p)) {
+                    $declarations[$name]['default'] = $p['default'];
+                }
+                continue;
+            }
+
+            $declarations[$name] = $p;
+        }
+
+        foreach ($declarations as $name => $parameter) {
+            $value = array_key_exists($name, $values)
+                ? $values[$name]
+                : ($parameter['default'] ?? null);
+            $required = (bool) ($parameter['required'] ?? false);
             if ($required && ($value === null || $value === '')) {
                 $this->errors[] = "Parameter [{$name}] is required.";
             }
 
-            $allowed = $p['allowed_values'] ?? $p['allowedValues'] ?? null;
+            $allowed = $parameter['allowed_values'] ?? $parameter['allowedValues'] ?? null;
             if ($allowed && $value !== null && ! in_array($value, $allowed, true)) {
                 $this->errors[] = "Parameter [{$name}] contains a disallowed value.";
             }

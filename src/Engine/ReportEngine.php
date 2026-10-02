@@ -60,8 +60,12 @@ final class ReportEngine
         }
 
         try {
-            // 1. Resolve parameters (defaults + token substitution + type coercion).
-            $resolvedParameters = $this->parameters->resolve($definition->parameters, $parameters);
+            // 1. Resolve parameters (source metadata + report default overrides
+            // + runtime values, followed by token substitution/type coercion).
+            $resolvedParameters = $this->parameters->resolve(
+                $this->mergeParameterDefinitions($source->parameters(), $definition->parameters),
+                $parameters,
+            );
 
             // 2. Build the base query (columns/filters/sorts already applied).
             $built = $this->queryBuilder->build($source, $definition, $resolvedParameters);
@@ -180,6 +184,50 @@ final class ReportEngine
             'tenant_id' => $report->tenant_id ?? null,
             'status' => ReportRun::STATUS_PENDING,
         ]);
+    }
+
+    /**
+     * Source metadata is authoritative for required/type/options. A saved
+     * report may override defaults and may also declare additional parameters.
+     *
+     * @param  array<int,array<string,mixed>>  $configured
+     * @return array<int,array<string,mixed>>
+     */
+    protected function mergeParameterDefinitions(\Illuminate\Support\Collection $sourceParameters, array $configured): array
+    {
+        $definitions = [];
+
+        foreach ($sourceParameters as $parameter) {
+            $data = $parameter->toArray();
+            $name = (string) ($data['name'] ?? '');
+            if ($name !== '') {
+                $definitions[$name] = $data;
+            }
+        }
+
+        foreach ($configured as $parameter) {
+            if (! is_array($parameter)) {
+                continue;
+            }
+
+            $name = trim((string) ($parameter['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            if (array_key_exists($name, $definitions)) {
+                // Do not let a stale/edited report definition weaken source
+                // metadata; only saved default bindings override the source.
+                if (array_key_exists('default', $parameter)) {
+                    $definitions[$name]['default'] = $parameter['default'];
+                }
+                continue;
+            }
+
+            $definitions[$name] = $parameter;
+        }
+
+        return array_values($definitions);
     }
 
     protected function persistSnapshot(Report $report, ReportRun $run, ReportResult $result): void

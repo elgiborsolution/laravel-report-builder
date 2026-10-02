@@ -25,7 +25,9 @@ final class ParameterResolver
 
         foreach ($declared as $param) {
             $name = $param['name'];
-            $value = $provided[$name] ?? $param['default'] ?? null;
+            $value = array_key_exists($name, $provided)
+                ? $provided[$name]
+                : ($param['default'] ?? null);
 
             $value = $this->resolver->setParams($provided)->resolve($value);
             $value = $this->coerce($value, $param['type'] ?? 'string');

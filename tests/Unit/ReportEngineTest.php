@@ -58,6 +58,22 @@ it('runs a report with date-range filter', function () {
         ->and($result->rows->first()['order_number'])->toBe('SO-001');
 });
 
+it('resolves source-declared runtime parameters even when they are not copied into the saved definition', function () {
+    makeReport('Runtime Source Parameters', [
+        'name' => 'Runtime Source Parameters',
+        'data_source' => 'sales_orders',
+        'columns' => [['field' => 'order_number', 'label' => 'Order']],
+    ]);
+
+    $result = AdvancedReports::run('runtime_source_parameters', [
+        'date_from' => '2026-01-01',
+        'date_to' => '2026-01-31',
+    ]);
+
+    expect($result->parameters['date_from']->toDateString())->toBe('2026-01-01')
+        ->and($result->parameters['date_to']->toDateString())->toBe('2026-01-31');
+});
+
 it('applies aggregate computation', function () {
     $report = makeReport('Sales With Total', [
         'name' => 'X',

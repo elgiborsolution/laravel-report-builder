@@ -186,3 +186,38 @@ it('rejects missing required parameters', function () {
         expect(collect($e->errors)->implode('; '))->toContain('date_from');
     }
 });
+
+it('validates required parameters declared by the source even when not copied into the report definition', function () {
+    $def = ReportDefinition::fromArray([
+        'name' => 'Source-defined parameters',
+        'data_source' => 'sales_orders',
+        'columns' => [['field' => 'order_number', 'label' => 'Order']],
+    ]);
+
+    try {
+        app(ReportDefinitionValidator::class)->validate($def, ['date_from' => '2026-01-01']);
+        $this->fail('Expected DefinitionInvalidException');
+    } catch (DefinitionInvalidException $e) {
+        expect(collect($e->errors)->implode('; '))->toContain('date_to');
+    }
+});
+
+it('accepts false and zero as provided required parameter values', function () {
+    $def = ReportDefinition::fromArray([
+        'name' => 'Falsy runtime parameters',
+        'data_source' => 'sales_orders',
+        'parameters' => [
+            ['name' => 'disabled', 'type' => 'boolean', 'required' => true],
+            ['name' => 'minimum', 'type' => 'decimal', 'required' => true],
+        ],
+    ]);
+
+    app(ReportDefinitionValidator::class)->validate($def, [
+        'date_from' => '2026-01-01',
+        'date_to' => '2026-01-31',
+        'disabled' => false,
+        'minimum' => 0,
+    ]);
+
+    expect(true)->toBeTrue();
+});

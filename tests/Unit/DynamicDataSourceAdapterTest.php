@@ -41,6 +41,8 @@ class DynamicDataSourceAdapterTest extends TestCase
                 $table->string('table_name');
                 $table->boolean('use_custom_query')->default(false);
                 $table->json('columns')->nullable();
+                $table->string('database_scope')->nullable();
+                $table->json('custom_parameters')->nullable();
                 $table->text('custom_query')->nullable();
                 $table->timestamps();
             });
@@ -54,6 +56,7 @@ class DynamicDataSourceAdapterTest extends TestCase
                 $table->string('param_type')->default('string');
                 $table->string('param_default_value')->nullable();
                 $table->boolean('is_required')->default(true);
+                $table->string('operator')->nullable();
                 $table->timestamps();
             });
         }
@@ -108,6 +111,21 @@ class DynamicDataSourceAdapterTest extends TestCase
             'use_custom_query' => true,
             'columns' => ['client_name', 'total_amount', 'invoice_count'],
             'custom_query' => 'SELECT client_name, SUM(total) as total_amount, COUNT(*) as invoice_count FROM invoices WHERE invoice_date >= :start_date GROUP BY client_name',
+            'custom_parameters' => [[
+                'name' => 'start_date',
+                'label' => 'Start date',
+                'type' => 'date',
+                'format' => 'Y-m-d',
+                'required' => true,
+                'default' => null,
+                'description' => 'Include invoices from this date.',
+                'options' => ['2026-01-01', '2026-02-01'],
+            ], [
+                'name' => 'obsolete_filter',
+                'type' => 'string',
+                'required' => false,
+                'unused' => true,
+            ]],
         ]);
     }
 
@@ -199,6 +217,73 @@ class DynamicDataSourceAdapterTest extends TestCase
         $this->assertEquals('string', $clientFilter->type);
         $this->assertFalse($clientFilter->required);
         $this->assertNull($clientFilter->default);
+    }
+
+    public function test_custom_query_parameter_metadata_is_exposed_to_the_designer(): void
+    {
+        $parameter = (new DynamicDataSourceAdapter($this->customQuerySource))->parameters()->get('start_date');
+
+        $this->assertSame('Start date', $parameter->label);
+        $this->assertSame('date', $parameter->type);
+        $this->assertSame('Y-m-d', $parameter->format);
+        $this->assertTrue($parameter->required);
+        $this->assertSame(['2026-01-01', '2026-02-01'], $parameter->allowedValues);
+        $this->assertSame('Include invoices from this date.', $parameter->description);
+        $this->assertFalse((new DynamicDataSourceAdapter($this->customQuerySource))->parameters()->has('obsolete_filter'));
+    }
+
+    public function test_table_parameters_filter_runtime_rows_and_preserve_zero_and_false(): void
+    {
+        DB::table('invoices')->insert([
+            ['invoice_number' => 'INV-001', 'client_name' => 'Acme', 'total' => 100, 'quantity' => 0, 'is_paid' => false, 'invoice_date' => '2026-01-15', 'created_at' => now(), 'updated_at' => now()],
+            ['invoice_number' => 'INV-002', 'client_name' => 'Globex', 'total' => 200, 'quantity' => 2, 'is_paid' => true, 'invoice_date' => '2026-02-01', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        DataSourceParameter::create([
+            'data_source_id' => $this->dataSource->id,
+            'param_name' => 'quantity',
+            'param_type' => 'integer',
+            'operator' => '=',
+            'is_required' => false,
+        ]);
+        DataSourceParameter::create([
+            'data_source_id' => $this->dataSource->id,
+            'param_name' => 'is_paid',
+            'param_type' => 'boolean',
+            'operator' => '=',
+            'is_required' => false,
+        ]);
+
+        $rows = (new DynamicDataSourceAdapter($this->dataSource))
+            ->query(['quantity' => 0, 'is_paid' => false])
+            ->get();
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('INV-001', $rows->first()->invoice_number);
+    }
+
+    public function test_custom_query_substitution_preserves_false_and_zero(): void
+    {
+        DB::table('invoices')->insert([
+            ['invoice_number' => 'INV-001', 'client_name' => 'Acme', 'total' => 0, 'quantity' => 0, 'is_paid' => false, 'invoice_date' => '2026-01-15', 'created_at' => now(), 'updated_at' => now()],
+            ['invoice_number' => 'INV-002', 'client_name' => 'Globex', 'total' => 2, 'quantity' => 2, 'is_paid' => true, 'invoice_date' => '2026-02-01', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+        $source = DataSource::create([
+            'name' => 'Falsies',
+            'table_name' => 'invoices',
+            'use_custom_query' => true,
+            'columns' => ['invoice_number'],
+            'custom_query' => 'SELECT invoice_number FROM invoices WHERE is_paid = :paid AND total >= :minimum',
+            'custom_parameters' => [
+                ['name' => 'paid', 'type' => 'boolean', 'required' => true],
+                ['name' => 'minimum', 'type' => 'decimal', 'required' => true],
+            ],
+        ]);
+
+        $rows = (new DynamicDataSourceAdapter($source))->query(['paid' => false, 'minimum' => 0])->get();
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('INV-001', $rows->first()->invoice_number);
     }
 
     public function test_query_builds_from_table_name(): void
