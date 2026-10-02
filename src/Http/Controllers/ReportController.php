@@ -64,7 +64,7 @@ class ReportController
     {
         $this->manager->authorize('edit', $report, auth()->user());
 
-        $report->update($request->validated());
+        $report->update($request->reportAttributes($report));
 
         return new ReportResource($report->fresh());
     }

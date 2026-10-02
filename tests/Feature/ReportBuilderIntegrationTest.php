@@ -126,8 +126,7 @@ class ReportBuilderIntegrationTest extends TestCase
     protected function actingAsTestUser(): void
     {
         $userModel = config('auth.providers.users.model', \Illuminate\Foundation\Auth\User::class);
-        $user = new $userModel(['id' => 1, 'name' => 'Test User', 'email' => 'test@example.com']);
-        $user->id = 1;
+        $user = (new $userModel())->forceFill(['id' => 1, 'name' => 'Test User', 'email' => 'test@example.com']);
 
         // Ensure user exists in DB for foreign key constraints.
         if (Schema::hasTable('users')) {
@@ -193,6 +192,21 @@ class ReportBuilderIntegrationTest extends TestCase
             'data_source_id' => $this->dataSource->id,
             'source_key' => "dynamic:{$this->dataSource->id}",
         ]);
+    }
+
+    public function test_connected_source_survives_update_reload_and_saved_preview(): void
+    {
+        $key = $this->connectDataSource();
+        $report = $this->createReportWithConnectedSource($key);
+        $url = '/api/advanced-reports/reports/'.$report->uuid;
+        $this->putJson($url, ['name' => $report->name, 'data_source' => $key, 'definition' => $report->definition])
+            ->assertOk()->assertJsonPath('data.definition.data_source', $key);
+        $this->getJson($url)->assertOk()->assertJsonPath('data.data_source', $key)
+            ->assertJsonPath('data.definition.data_source', $key);
+        $this->patchJson($url, ['definition' => ['sorts' => [['field' => 'order_number', 'direction' => 'desc']]]])
+            ->assertOk()->assertJsonPath('data.definition.data_source', $key);
+        $this->postJson($url.'/preview', ['parameters' => ['status_filter' => null]])
+            ->assertOk()->assertJsonPath('rows.0.order_number', 'ORD-005');
     }
 
     public function test_connected_source_appears_in_sources_list(): void
