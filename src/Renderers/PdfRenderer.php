@@ -27,8 +27,18 @@ final class PdfRenderer implements ReportRenderer
 
     public function render(ReportResult $result, array $options = []): mixed
     {
-        $html = $this->htmlRenderer->render($result, $options);
+        $layout = $result->layout ?? [];
         $driver = config('advanced-reports.pdf.driver', 'dompdf');
+        $options = [
+            ...$options,
+            'paper' => $options['paper'] ?? $layout['pageSize'] ?? config('advanced-reports.pdf.options.paper', 'a4'),
+            'orientation' => $options['orientation'] ?? $layout['orientation'] ?? config('advanced-reports.pdf.options.orientation', 'portrait'),
+            'pdf_mode' => true,
+            'show_page_numbers' => (bool) ($layout['showPageNumbers'] ?? false),
+        ];
+        $options['paper'] = $this->normalizePaper((string) $options['paper']);
+        $options['orientation'] = $this->normalizeOrientation((string) $options['orientation']);
+        $html = $this->htmlRenderer->render($result, $options);
 
         return match ($driver) {
             'dompdf' => $this->renderWithDompdf($html, $options),
@@ -54,6 +64,25 @@ final class PdfRenderer implements ReportRenderer
         $pdf->loadHTML($html)
             ->setPaper($paper, $orientation);
 
+        if ($options['show_page_numbers'] ?? false) {
+            $pdf->render();
+            $dompdf = $pdf->getDomPDF();
+            $canvas = $dompdf->getCanvas();
+            $fontMetrics = $dompdf->getFontMetrics();
+            $font = $fontMetrics->getFont('Helvetica', 'normal');
+            $label = 'Page {PAGE_NUM} of {PAGE_COUNT}';
+            $labelWidth = $fontMetrics->getTextWidth('Page 999 of 999', $font, 8);
+
+            $canvas->page_text(
+                $canvas->get_width() - 40 - $labelWidth,
+                $canvas->get_height() - 28,
+                $label,
+                $font,
+                8,
+                [0.29, 0.33, 0.38],
+            );
+        }
+
         // Allow callers to stream or download.
         if ($options['action'] ?? false === 'stream') {
             return $pdf->stream(
@@ -72,16 +101,23 @@ final class PdfRenderer implements ReportRenderer
             throw MissingDependencyException::forPackage('spatie/browsershot', 'PDF export via Browsershot');
         }
 
-        $paper = $options['paper'] ?? config('advanced-reports.pdf.options.paper', 'a4');
+        $browser = \Spatie\Browsershot\Browsershot::html($html)
+            ->paperSize(ucfirst((string) ($options['paper'] ?? config('advanced-reports.pdf.options.paper', 'a4'))));
 
-        return \Spatie\Browsershot\Browsershot::html($html)
-            ->paperSize($paper)
-            ->pdf();
+        if (($options['orientation'] ?? 'portrait') === 'landscape') {
+            $browser->landscape();
+        }
+
+        return $browser->pdf();
     }
 
     protected function renderWithCustom(string $html, array $options = []): mixed
     {
-        $engine = app()->tagged('advanced-reports.pdf.engine')[0] ?? null;
+        $engine = null;
+        foreach (app()->tagged('advanced-reports.pdf.engine') as $taggedEngine) {
+            $engine = $taggedEngine;
+            break;
+        }
         if (! $engine || ! is_callable($engine)) {
             throw MissingDependencyException::forPackage('custom PDF engine', 'PDF export');
         }
@@ -92,5 +128,23 @@ final class PdfRenderer implements ReportRenderer
     protected function filename(array $options = []): string
     {
         return ($options['filename'] ?? 'report') . '_' . now()->format('Y-m-d_His');
+    }
+
+    protected function normalizePaper(string $paper): string
+    {
+        $paper = strtolower($paper);
+
+        return in_array($paper, ['a4', 'letter', 'legal'], true)
+            ? $paper
+            : strtolower((string) config('advanced-reports.pdf.options.paper', 'a4'));
+    }
+
+    protected function normalizeOrientation(string $orientation): string
+    {
+        $orientation = strtolower($orientation);
+
+        return in_array($orientation, ['portrait', 'landscape'], true)
+            ? $orientation
+            : strtolower((string) config('advanced-reports.pdf.options.orientation', 'portrait'));
     }
 }

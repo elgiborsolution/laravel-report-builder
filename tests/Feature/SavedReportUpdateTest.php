@@ -27,7 +27,15 @@ beforeEach(function () {
         'sorts' => [['field' => 'order_number', 'direction' => 'asc']],
         'filters' => [], 'formulas' => [], 'drilldowns' => [], 'subreports' => [],
         'conditional_formatting' => [['field' => 'total_amount', 'operator' => '>', 'value' => 0, 'style' => ['color' => '#123456']]],
-        'layout' => ['title' => 'Saved layout'], 'meta' => ['application_tag' => 'keep'],
+        'layout' => [
+            'title' => 'Saved layout',
+            'headerText' => 'Quarterly overview',
+            'footerText' => 'Internal use only',
+            'pageSize' => 'a4',
+            'orientation' => 'landscape',
+            'showPageNumbers' => true,
+        ],
+        'meta' => ['application_tag' => 'keep'],
     ];
     $this->report = Report::create([
         'name' => 'Saved sales', 'code' => 'saved-sales', 'data_source' => 'sales_orders',
@@ -39,7 +47,11 @@ beforeEach(function () {
 it('persists the full frontend update definition and reloads it for saved preview and run', function () {
     $this->putJson($this->url, ['name' => 'Saved sales', 'data_source' => 'sales_orders', 'definition' => $this->definition])
         ->assertOk()->assertJsonPath('data.definition', $this->definition);
-    $this->getJson($this->url)->assertOk()->assertJsonPath('data.definition.data_source', 'sales_orders');
+    $this->getJson($this->url)->assertOk()
+        ->assertJsonPath('data.definition.data_source', 'sales_orders')
+        ->assertJsonPath('data.definition.layout.headerText', 'Quarterly overview')
+        ->assertJsonPath('data.definition.layout.footerText', 'Internal use only')
+        ->assertJsonPath('data.definition.layout.orientation', 'landscape');
     $this->postJson($this->url.'/preview', ['parameters' => ['id' => null]])
         ->assertOk()->assertJsonCount(3, 'rows')->assertJsonPath('presentation_rows.0.type', 'group_header');
     $this->postJson($this->url.'/run', ['format' => 'json', 'parameters' => ['id' => null]])

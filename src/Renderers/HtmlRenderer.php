@@ -56,6 +56,7 @@ final class HtmlRenderer implements ReportRenderer
             'parameters' => $result->parameters,
             'metadata' => $result->metadata,
             'layout' => $result->layout,
+            'pdfMode' => (bool) ($options['pdf_mode'] ?? false),
         ])->render();
     }
 

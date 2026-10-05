@@ -15,20 +15,23 @@ use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
+use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 
 /**
  * Excel renderer powered by Laravel Excel (maatwebsite/excel).
  * Supports column-aligned grouping/subtotal rows, grand totals, and
  * format-based number formatting.
  */
-final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeadings, WithTitle, WithColumnFormatting, WithStyles
+final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeadings, WithTitle, WithColumnFormatting, WithStyles, WithEvents
 {
     use Exportable;
 
@@ -163,15 +166,18 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
 
-        // Borders
-        $sheet->getStyle("A1:{$lastCol}{$lastRow}")
-            ->applyFromArray([
-                'borders' => [
-                    'allBorders' => [
-                        'borderStyle' => Border::BORDER_THIN,
+        // Keep the designer's table-border setting, defaulting to its prior
+        // visible behavior for reports saved before that setting existed.
+        if (($this->result->layout['showBorders'] ?? true) !== false) {
+            $sheet->getStyle("A1:{$lastCol}{$lastRow}")
+                ->applyFromArray([
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                        ],
                     ],
-                ],
-            ]);
+                ]);
+        }
 
         foreach ($this->averageCellFormats as $cell => $formatCode) {
             $sheet->getStyle($cell)->getNumberFormat()->setFormatCode($formatCode);
@@ -185,6 +191,55 @@ final class ExcelRenderer implements ReportRenderer, FromCollection, WithHeading
         foreach (range(1, $columnCount) as $i) {
             $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
         }
+    }
+
+    /** Apply page layout and repeating print areas from the saved designer layout. */
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event): void {
+                $sheet = $event->sheet->getDelegate();
+                $layout = $this->result->layout ?? [];
+                $pageSetup = $sheet->getPageSetup();
+
+                if (array_key_exists('pageSize', $layout)) {
+                    $pageSetup->setPaperSize(match (strtolower((string) $layout['pageSize'])) {
+                        'letter' => PageSetup::PAPERSIZE_LETTER,
+                        'legal' => PageSetup::PAPERSIZE_LEGAL,
+                        default => PageSetup::PAPERSIZE_A4,
+                    });
+                }
+                if (array_key_exists('orientation', $layout)) {
+                    $pageSetup->setOrientation($layout['orientation'] === 'landscape'
+                        ? PageSetup::ORIENTATION_LANDSCAPE
+                        : PageSetup::ORIENTATION_PORTRAIT);
+                }
+                // The table's column headings stay separate from the
+                // report-level page header and repeat on printed pages.
+                $pageSetup->setRowsToRepeatAtTopByStartAndEnd(1, 1);
+
+                $headerFooter = $sheet->getHeaderFooter();
+                $headerText = trim((string) ($layout['headerText'] ?? ''));
+                $footerText = trim((string) ($layout['footerText'] ?? ''));
+                if ($headerText !== '') {
+                    $headerFooter->setOddHeader('&L'.$this->escapeHeaderFooterText($headerText));
+                }
+
+                $footer = $footerText === '' ? '' : '&L'.$this->escapeHeaderFooterText($footerText);
+                if ($layout['showPageNumbers'] ?? false) {
+                    $footer .= '&RPage &P of &N';
+                }
+                if ($footer !== '') {
+                    $headerFooter->setOddFooter($footer);
+                }
+            },
+        ];
+    }
+
+    /** Prevent text entered in the designer from being treated as Excel control codes. */
+    protected function escapeHeaderFooterText(string $text): string
+    {
+        return str_replace('&', '&&', $text);
     }
 
     /** Apply merged label cells and each aggregate's style, as resolved by SummaryRowLayout. */

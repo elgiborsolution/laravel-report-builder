@@ -40,6 +40,13 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
     }
     return '<a href="'.e($url).'" data-drilldown="'.e($field).'">'.e((string) $value).'</a>';
 };
+
+$layout = is_array($layout ?? null) ? $layout : [];
+$headerText = trim((string) ($layout['headerText'] ?? ''));
+$footerText = trim((string) ($layout['footerText'] ?? ''));
+$showPageNumbers = (bool) ($layout['showPageNumbers'] ?? false);
+$showBorders = (bool) ($layout['showBorders'] ?? true);
+$pdfMode = (bool) ($pdfMode ?? false);
 @endphp
 
 <!DOCTYPE html>
@@ -52,8 +59,10 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
         h1 { font-size: 1.5rem; margin-bottom: 4px; }
         .meta { color: #6b7280; font-size: 0.85rem; margin-bottom: 16px; }
         table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-        th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
-        thead th { background: #f3f4f6; font-weight: 600; position: sticky; top: 0; }
+        th, td { padding: 8px 10px; text-align: left; }
+        .report-table.with-borders th, .report-table.with-borders td { border: 1px solid #e5e7eb; }
+        .report-table.without-borders th, .report-table.without-borders td { border: none; }
+        thead th { background: #f3f4f6; font-weight: 600; }
         tbody tr:nth-child(even) { background: #fafafa; }
         tfoot td { background: #eff6ff; font-weight: 600; }
         .group-header td { background: #e0e7ff; font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.04em; }
@@ -64,9 +73,27 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
         .aggregate-value + .aggregate-value { display: block; }
         a[data-drilldown] { color: #2563eb; text-decoration: none; }
         a[data-drilldown]:hover { text-decoration: underline; }
+        .report-layout-header, .report-layout-footer { color: #4b5563; font-size: 9pt; }
+        .report-layout-header { margin-bottom: 10px; }
+        .report-layout-footer { display: flex; justify-content: space-between; margin-top: 10px; }
+        @if ($pdfMode)
+            @page { margin: 2cm 1.4cm; }
+            body { margin: 0; }
+            h1 { font-size: 14pt; }
+            .report-layout-header { position: fixed; top: -1.35cm; left: 0; right: 0; height: .65cm; margin: 0; border-bottom: .5pt solid #d1d5db; }
+            .report-layout-footer { position: fixed; bottom: -1.35cm; left: 0; right: 0; height: .65cm; margin: 0; border-top: .5pt solid #d1d5db; }
+            .report-page-number { margin-left: auto; text-align: right; }
+            thead { display: table-header-group; }
+            tfoot { display: table-row-group; }
+            tr { page-break-inside: avoid; }
+        @endif
     </style>
 </head>
 <body>
+    @if ($headerText !== '')
+        <div class="report-layout-header">{{ $headerText }}</div>
+    @endif
+
     <h1>{{ $report->name }}</h1>
     <div class="meta">
         @if ($report->description)<p>{{ $report->description }}</p>@endif
@@ -74,7 +101,7 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
         {{ $metadata['row_count'] ?? count($rows) }} rows
     </div>
 
-    <table>
+    <table class="report-table {{ $showBorders ? 'with-borders' : 'without-borders' }}">
         <thead>
             <tr>
                 @foreach ($columns as $col)
@@ -125,5 +152,16 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
             </tfoot>
         @endif
     </table>
+
+    @if ($footerText !== '' || ($pdfMode && $showPageNumbers))
+        <div class="report-layout-footer">
+            @if ($footerText !== '')
+                <span>{{ $footerText }}</span>
+            @endif
+            @if ($pdfMode && $showPageNumbers)
+                <span class="report-page-number"></span>
+            @endif
+        </div>
+    @endif
 </body>
 </html>

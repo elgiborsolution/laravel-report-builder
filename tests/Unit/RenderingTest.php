@@ -81,7 +81,9 @@ it('renders HTML output as a string containing a table', function () {
         ->and($html)->toContain('Sales')
         ->and($html)->toContain('Amount with tax')
         ->and($html)->toContain('1,110')
-        ->and($html)->toContain('SO-001');
+        ->and($html)->toContain('SO-001')
+        ->and($html)->not->toContain('<div class="report-layout-header">')
+        ->and($html)->not->toContain('<div class="report-layout-footer">');
 });
 
 it('renders grouping events consistently and aligns group totals to their source columns', function () {
@@ -199,6 +201,123 @@ it('exports selected formula columns to CSV and XLSX in matching order', functio
 
     expect($excel->headings())->toBe(['Order', 'Amount', 'Amount with tax'])
         ->and($excel->collection()->first()[2])->toContain('1,110');
+});
+
+it('exports configured report headers and footers without replacing column or aggregate rows', function () {
+    \ElgiborSolution\AdvancedReports\Models\Report::create([
+        'name' => 'Configured Layout',
+        'code' => 'configured_layout',
+        'data_source' => 'sales_orders',
+        'definition' => [
+            'name' => 'Configured Layout',
+            'data_source' => 'sales_orders',
+            'parameters' => [
+                ['name' => 'date_from', 'default' => '2026-01-01'],
+                ['name' => 'date_to', 'default' => '2026-12-31'],
+            ],
+            'columns' => [
+                ['field' => 'order_number', 'label' => 'Order'],
+                ['field' => 'total_amount', 'label' => 'Amount', 'format' => 'decimal'],
+            ],
+            'groups' => [['field' => 'customer_name', 'label' => 'Customer']],
+            'aggregates' => [['field' => 'total_amount', 'function' => 'sum', 'label' => 'Amount total']],
+            'layout' => [
+                'headerText' => 'Sales & Service',
+                'footerText' => 'Confidential',
+                'pageSize' => 'letter',
+                'orientation' => 'landscape',
+                'showPageNumbers' => true,
+                'showBorders' => true,
+            ],
+        ],
+        'is_active' => true,
+        'is_public' => true,
+    ]);
+
+    $result = AdvancedReports::run('configured_layout');
+    $htmlRenderer = app(HtmlRenderer::class);
+    $html = $htmlRenderer->render($result);
+
+    expect($html)
+        ->toContain('Sales &amp; Service')
+        ->toContain('Confidential')
+        ->toContain('<th>Order</th>')
+        ->toContain('Grand total');
+
+    config()->set('advanced-reports.pdf.driver', 'custom');
+    $capturedPdf = null;
+    app()->bind('configured-layout-pdf-engine', static function () use (&$capturedPdf) {
+        return static function (string $pdfHtml, array $options = []) use (&$capturedPdf) {
+            $capturedPdf = ['html' => $pdfHtml, 'options' => $options];
+
+            return $capturedPdf;
+        };
+    });
+    app()->tag('configured-layout-pdf-engine', 'advanced-reports.pdf.engine');
+    $pdfOutput = app(\ElgiborSolution\AdvancedReports\Export\ExportManager::class)->export($result, 'pdf');
+
+    expect($pdfOutput['options'])
+        ->toMatchArray(['paper' => 'letter', 'orientation' => 'landscape', 'show_page_numbers' => true])
+        ->and($pdfOutput['html'])
+        ->toContain('Sales &amp; Service')
+        ->toContain('Confidential')
+        ->toContain('report-page-number')
+        ->toContain('display: table-header-group')
+        ->toContain('display: table-row-group')
+        ->toContain('<th>Order</th>')
+        ->toContain('Grand total')
+        ->and(strpos($pdfOutput['html'], 'Grand total'))->toBeLessThan(strpos($pdfOutput['html'], 'Confidential'));
+
+    $pdfOverride = app(\ElgiborSolution\AdvancedReports\Export\ExportManager::class)->export(
+        $result,
+        'pdf',
+        ['paper' => 'legal', 'orientation' => 'portrait'],
+    );
+    expect($pdfOverride['options'])->toMatchArray(['paper' => 'legal', 'orientation' => 'portrait']);
+
+    $csvResponse = AdvancedReports::render('configured_layout', 'csv');
+    ob_start();
+    $csvResponse->sendContent();
+    $csv = ltrim((string) ob_get_clean(), "\xEF\xBB\xBF");
+    $csvRows = array_map(
+        static fn (string $line) => str_getcsv($line),
+        array_values(array_filter(preg_split('/\\r\\n|\\r|\\n/', trim($csv)) ?: [])),
+    );
+    $grandTotalIndex = array_search('Grand total', array_map(static fn (array $row) => $row[0] ?? null, $csvRows), true);
+
+    expect($csvRows[0])->toBe(['Sales & Service', ''])
+        ->and($csvRows[1])->toBe(['Order', 'Amount'])
+        ->and($grandTotalIndex)->toBeInt()
+        ->and($grandTotalIndex)->toBeLessThan(array_key_last($csvRows))
+        ->and($csvRows[array_key_last($csvRows)])->toBe(['Confidential', '']);
+
+    $excel = app(\ElgiborSolution\AdvancedReports\Renderers\ExcelRenderer::class);
+    $property = new ReflectionProperty($excel, 'result');
+    $property->setAccessible(true);
+    $property->setValue($excel, $result);
+    app()->register(\Maatwebsite\Excel\ExcelServiceProvider::class);
+    $xlsx = \Maatwebsite\Excel\Facades\Excel::raw($excel, \Maatwebsite\Excel\Excel::XLSX);
+    $path = tempnam(sys_get_temp_dir(), 'report-layout-');
+    file_put_contents($path, $xlsx);
+
+    try {
+        $workbook = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+        $sheet = $workbook->getActiveSheet();
+        $pageSetup = $sheet->getPageSetup();
+
+        expect($sheet->getCell('A1')->getValue())->toBe('Order')
+            ->and($sheet->getHeaderFooter()->getOddHeader())->toBe('&LSales && Service')
+            ->and($sheet->getHeaderFooter()->getOddFooter())->toBe('&LConfidential&RPage &P of &N')
+            ->and($pageSetup->getPaperSize())->toBe(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_LETTER)
+            ->and($pageSetup->getOrientation())->toBe(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE)
+            ->and($pageSetup->getRowsToRepeatAtTop())->toBe(['1', '1'])
+            ->and($sheet->getStyle('A1')->getBorders()->getLeft()->getBorderStyle())->toBe(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
+            ->and(collect($excel->collection())->flatten()->contains('Grand total'))->toBeTrue();
+
+        $workbook->disconnectWorksheets();
+    } finally {
+        @unlink($path);
+    }
 });
 
 it('excludes hidden fields from rendered output', function () {

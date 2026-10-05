@@ -36,8 +36,19 @@ final class ExportManager
         ?Authenticatable $user = null,
     ): mixed {
         $opts = ExportOptions::fromArray(array_merge($options, ['format' => $format]));
+        $renderOptions = $opts->toArray();
 
-        return $this->engine->render($result, $format, $opts->toArray());
+        // ExportOptions fills page settings from global config. Preserve
+        // whether the caller actually supplied an override so PDF renderers
+        // can prefer the report's saved layout when it did not.
+        if (! array_key_exists('paper', $options)) {
+            unset($renderOptions['paper']);
+        }
+        if (! array_key_exists('orientation', $options)) {
+            unset($renderOptions['orientation']);
+        }
+
+        return $this->engine->render($result, $format, $renderOptions);
     }
 
     /**

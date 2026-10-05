@@ -30,10 +30,13 @@ final class CsvRenderer implements ReportRenderer
         $enclosure = $options['enclosure'] ?? '"';
         $escape = $options['escape'] ?? '\\';
         $bom = (bool) ($options['bom'] ?? true);
+        $layout = $result->layout ?? [];
+        $headerText = trim((string) ($layout['headerText'] ?? ''));
+        $footerText = trim((string) ($layout['footerText'] ?? ''));
 
         $columns = $result->columns;
 
-        return new StreamedResponse(function () use ($result, $columns, $bom, $options, $delimiter, $enclosure, $escape) {
+        return new StreamedResponse(function () use ($result, $columns, $bom, $options, $delimiter, $enclosure, $escape, $headerText, $footerText) {
             $handle = fopen('php://output', 'w');
             if (! $handle) {
                 return;
@@ -42,6 +45,12 @@ final class CsvRenderer implements ReportRenderer
             // BOM for Excel UTF-8 compatibility.
             if ($bom) {
                 fwrite($handle, "\xEF\xBB\xBF");
+            }
+
+            // CSV has no page header/footer areas. Preserve configured content
+            // as distinct lines while keeping the column header row intact.
+            if ($headerText !== '') {
+                fputcsv($handle, array_merge([$headerText], array_fill(0, max(0, count($columns) - 1), '')), $delimiter, $enclosure, $escape);
             }
 
             // Header row.
@@ -90,6 +99,10 @@ final class CsvRenderer implements ReportRenderer
                     $cells = PresentationTableRows::cells($presentationRow, $details, $columns, $this->formatter, $result->definition->aggregates, $result->layout);
                     fputcsv($handle, $cells, $delimiter, $enclosure, $escape);
                 }
+            }
+
+            if ($footerText !== '') {
+                fputcsv($handle, array_merge([$footerText], array_fill(0, max(0, count($columns) - 1), '')), $delimiter, $enclosure, $escape);
             }
 
             fclose($handle);
