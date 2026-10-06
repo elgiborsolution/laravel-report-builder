@@ -44,9 +44,31 @@ $drilldownLink = function (string $field, $value, $row) use ($drilldownMap) {
 $layout = is_array($layout ?? null) ? $layout : [];
 $headerText = trim((string) ($layout['headerText'] ?? ''));
 $footerText = trim((string) ($layout['footerText'] ?? ''));
-$showPageNumbers = (bool) ($layout['showPageNumbers'] ?? false);
 $showBorders = (bool) ($layout['showBorders'] ?? true);
 $pdfMode = (bool) ($pdfMode ?? false);
+$headerStyle = \ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle::normalize(is_array($layout['headerStyle'] ?? null) ? $layout['headerStyle'] : null);
+$footerStyle = \ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle::normalize(is_array($layout['footerStyle'] ?? null) ? $layout['footerStyle'] : null);
+$headerStyleCss = \ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle::css($headerStyle);
+$footerStyleCss = \ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle::css($footerStyle);
+$reportInfo = is_array($reportInfo ?? null) ? $reportInfo : [
+    'visible' => true,
+    'title' => $report->name,
+    'subtitle' => '',
+    'description' => $report->description,
+    'style' => \ElgiborSolution\AdvancedReports\Support\ReportInfoSettings::normalize(null),
+];
+$reportInfoHasContent = trim((string) ($reportInfo['title'] ?? '')) !== ''
+    || trim((string) ($reportInfo['subtitle'] ?? '')) !== ''
+    || trim((string) ($reportInfo['description'] ?? '')) !== '';
+$reportInfoStyleCss = \ElgiborSolution\AdvancedReports\Support\ReportInfoSettings::css($reportInfo['style'] ?? null);
+if ($pdfMode) {
+    $pageGeometry ??= \ElgiborSolution\AdvancedReports\Support\PageNumberSettings::geometry($layout, $layout['pageSize'] ?? 'a4', $layout['orientation'] ?? 'portrait');
+    $headerText = $pageGeometry['header']['text'];
+    $footerText = $pageGeometry['footer']['text'];
+    $headerStyleCss .= '; font-family: '.\ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle::pdfFontFamily($headerStyle);
+    $footerStyleCss .= '; font-family: '.\ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle::pdfFontFamily($footerStyle);
+}
+$inlineFooter = $pdfMode && ($pageGeometry['footer']['inline'] ?? false);
 @endphp
 
 <!DOCTYPE html>
@@ -57,7 +79,10 @@ $pdfMode = (bool) ($pdfMode ?? false);
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #1f2937; }
         h1 { font-size: 1.5rem; margin-bottom: 4px; }
-        .meta { color: #6b7280; font-size: 0.85rem; margin-bottom: 16px; }
+        .report-info h1 { margin-top: 0; }
+        .report-info p { margin-top: 0; margin-bottom: 0.25rem; }
+        .report-info h1,
+        .report-info p { font: inherit; text-align: inherit; color: inherit; text-decoration: inherit; margin: 0; background: transparent; }
         table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
         th, td { padding: 8px 10px; text-align: left; }
         .report-table.with-borders th, .report-table.with-borders td { border: 1px solid #e5e7eb; }
@@ -73,16 +98,20 @@ $pdfMode = (bool) ($pdfMode ?? false);
         .aggregate-value + .aggregate-value { display: block; }
         a[data-drilldown] { color: #2563eb; text-decoration: none; }
         a[data-drilldown]:hover { text-decoration: underline; }
-        .report-layout-header, .report-layout-footer { color: #4b5563; font-size: 9pt; }
+        .report-layout-header, .report-layout-footer { color: #4b5563; white-space: pre-wrap; line-height: 1.4; overflow-wrap: break-word; }
         .report-layout-header { margin-bottom: 10px; }
-        .report-layout-footer { display: flex; justify-content: space-between; margin-top: 10px; }
+        .report-layout-footer { display: block; margin-top: 10px; }
+        .report-layout-decoration-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0; font: inherit; color: inherit; background: transparent; }
+        .report-layout-decoration-table td { padding: 0; border: 0; background: transparent; vertical-align: middle; }
         @if ($pdfMode)
-            @page { margin: 2cm 1.4cm; }
+            @page { margin: {{ $pageGeometry['header']['margin'] }}pt {{ $pageGeometry['side'] }}pt {{ $pageGeometry['footer']['margin'] }}pt; }
             body { margin: 0; }
             h1 { font-size: 14pt; }
-            .report-layout-header { position: fixed; top: -1.35cm; left: 0; right: 0; height: .65cm; margin: 0; border-bottom: .5pt solid #d1d5db; }
-            .report-layout-footer { position: fixed; bottom: -1.35cm; left: 0; right: 0; height: .65cm; margin: 0; border-top: .5pt solid #d1d5db; }
-            .report-page-number { margin-left: auto; text-align: right; }
+            .report-layout-header { position: fixed; top: {{ $pageGeometry['header']['offset'] - $pageGeometry['header']['margin'] }}pt; left: 0; right: 0; height: {{ $pageGeometry['header']['textHeight'] }}pt; margin: 0; }
+            .report-layout-footer { position: fixed; bottom: {{ $pageGeometry['footer']['offset'] - $pageGeometry['footer']['margin'] }}pt; left: 0; right: 0; height: {{ $pageGeometry['footer']['rowHeight'] }}pt; margin: 0; }
+            .footer-inline-table { table-layout: fixed; border-collapse: collapse; margin: 0; width: 100%; height: {{ $pageGeometry['footer']['rowHeight'] }}pt; white-space: normal; }
+            .report-inline-footer { white-space: normal; }
+            .footer-inline-table td { border: 0; padding: 0; background: transparent; vertical-align: middle; }
             thead { display: table-header-group; }
             tfoot { display: table-row-group; }
             tr { page-break-inside: avoid; }
@@ -91,15 +120,16 @@ $pdfMode = (bool) ($pdfMode ?? false);
 </head>
 <body>
     @if ($headerText !== '')
-        <div class="report-layout-header">{{ $headerText }}</div>
+        <div class="report-layout-header" style="{{ $headerStyleCss }}">{{ $headerText }}</div>
     @endif
 
-    <h1>{{ $report->name }}</h1>
-    <div class="meta">
-        @if ($report->description)<p>{{ $report->description }}</p>@endif
-        Generated {{ now()->toDateTimeString() }} &middot;
-        {{ $metadata['row_count'] ?? count($rows) }} rows
-    </div>
+    @if ($reportInfo['visible'] && $reportInfoHasContent)
+        <section class="report-info" style="{{ $reportInfoStyleCss }}">
+            @if ($reportInfo['title'] !== '')<h1>{{ $reportInfo['title'] }}</h1>@endif
+            @if ($reportInfo['subtitle'] !== '')<p class="report-info-subtitle">{{ $reportInfo['subtitle'] }}</p>@endif
+            @if ($reportInfo['description'] !== '')<p class="report-info-description">{{ $reportInfo['description'] }}</p>@endif
+        </section>
+    @endif
 
     <table class="report-table {{ $showBorders ? 'with-borders' : 'without-borders' }}">
         <thead>
@@ -153,15 +183,26 @@ $pdfMode = (bool) ($pdfMode ?? false);
         @endif
     </table>
 
-    @if ($footerText !== '' || ($pdfMode && $showPageNumbers))
-        <div class="report-layout-footer">
-            @if ($footerText !== '')
-                <span>{{ $footerText }}</span>
-            @endif
-            @if ($pdfMode && $showPageNumbers)
-                <span class="report-page-number"></span>
-            @endif
+    @if ($inlineFooter)
+        <div class="report-layout-footer report-inline-footer">
+            <table class="footer-inline-table"><tbody><tr>
+                @if ($pageGeometry['footer']['numberFirst'])
+                    <td class="footer-number-region" style="width: {{ 100 * $pageGeometry['footer']['numberWidth'] / ($pageGeometry['width'] - 80) }}%"><div style="height: {{ $pageGeometry['footer']['numberHeight'] }}pt"></div></td>
+                    <td style="width: {{ 100 * $pageGeometry['footer']['gap'] / ($pageGeometry['width'] - 80) }}%"></td>
+                @endif
+                <td class="footer-content-region" style="width: {{ 100 * $pageGeometry['footer']['contentWidth'] / ($pageGeometry['width'] - 80) }}%">
+                    @if ($footerText !== '')
+                        <div style="{{ $footerStyleCss }}; white-space: pre-wrap; line-height: 1.4">{{ $footerText }}</div>
+                    @endif
+                </td>
+                @if (! $pageGeometry['footer']['numberFirst'])
+                    <td style="width: {{ 100 * $pageGeometry['footer']['gap'] / ($pageGeometry['width'] - 80) }}%"></td>
+                    <td class="footer-number-region" style="width: {{ 100 * $pageGeometry['footer']['numberWidth'] / ($pageGeometry['width'] - 80) }}%"><div style="height: {{ $pageGeometry['footer']['numberHeight'] }}pt"></div></td>
+                @endif
+            </tr></tbody></table>
         </div>
+    @elseif ($footerText !== '')
+        <div class="report-layout-footer" style="{{ $footerStyleCss }}">{{ $footerText }}</div>
     @endif
 </body>
 </html>

@@ -7,6 +7,8 @@ namespace ElgiborSolution\AdvancedReports\Renderers;
 use ElgiborSolution\AdvancedReports\Contracts\ReportRenderer;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Exceptions\MissingDependencyException;
+use ElgiborSolution\AdvancedReports\Support\HeaderFooterStyle;
+use ElgiborSolution\AdvancedReports\Support\PageNumberSettings;
 
 /**
  * PDF renderer. Renders HTML first, then converts to PDF via a configurable
@@ -38,6 +40,17 @@ final class PdfRenderer implements ReportRenderer
         ];
         $options['paper'] = $this->normalizePaper((string) $options['paper']);
         $options['orientation'] = $this->normalizeOrientation((string) $options['orientation']);
+        $options['page_numbers'] = PageNumberSettings::normalize($layout);
+        $options['number_style'] = PageNumberSettings::style($layout);
+        $measure = null;
+        if ($driver === 'dompdf' && class_exists(\Barryvdh\DomPDF\PDF::class)) {
+            $metrics = app('dompdf.wrapper')->getDomPDF()->getFontMetrics();
+            $measure = static function (string $text, array $style, float $size) use ($metrics): float {
+                $font = $metrics->getFont(HeaderFooterStyle::pdfFontFamily($style), HeaderFooterStyle::pdfFontStyle($style));
+                return $metrics->getTextWidth($text, $font, $size);
+            };
+        }
+        $options['page_geometry'] = PageNumberSettings::geometry($layout, $options['paper'], $options['orientation'], $measure);
         $html = $this->htmlRenderer->render($result, $options);
 
         return match ($driver) {
@@ -69,18 +82,34 @@ final class PdfRenderer implements ReportRenderer
             $dompdf = $pdf->getDomPDF();
             $canvas = $dompdf->getCanvas();
             $fontMetrics = $dompdf->getFontMetrics();
-            $font = $fontMetrics->getFont('Helvetica', 'normal');
-            $label = 'Page {PAGE_NUM} of {PAGE_COUNT}';
-            $labelWidth = $fontMetrics->getTextWidth('Page 999 of 999', $font, 8);
-
-            $canvas->page_text(
-                $canvas->get_width() - 40 - $labelWidth,
-                $canvas->get_height() - 28,
-                $label,
-                $font,
-                8,
-                [0.29, 0.33, 0.38],
+            $style = $options['number_style'];
+            $numberColor = HeaderFooterStyle::pdfRgb($style);
+            $settings = $options['page_numbers'];
+            $font = $fontMetrics->getFont(
+                HeaderFooterStyle::pdfFontFamily($style),
+                HeaderFooterStyle::pdfFontStyle($style),
             );
+            $fontSize = PageNumberSettings::fontSize($settings);
+            $geometry = $options['page_geometry'];
+            $canvas->page_script(static function (int $page, int $count, $canvas, $metrics) use ($settings, $style, $font, $fontSize, $numberColor, $geometry): void {
+                $label = "Page {$page} of {$count}";
+                $labelWidth = $metrics->getTextWidth($label, $font, $fontSize);
+                $inline = $geometry['footer']['inline'] && $settings['position'] === 'footer';
+                $region = $geometry['footer'];
+                $inset = $inline ? $geometry['side'] + $region['numberStart'] : max(40, $settings['edgeSpacing']);
+                $regionWidth = $inline ? $region['numberWidth'] : $canvas->get_width() - 2 * $inset;
+                if ($inline && $labelWidth > $regionWidth) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['definition.layout.pageNumbers' => 'Page counter exceeds the reserved footer region.']);
+                }
+                $x = match ($settings['alignment']) {
+                    'left' => $inset, 'center' => $inset + ($regionWidth - $labelWidth) / 2,
+                    default => $inset + $regionWidth - $labelWidth,
+                };
+                $y = $inline
+                    ? $canvas->get_height() - $region['edge'] - $region['rowHeight'] + ($region['rowHeight'] - $region['numberHeight']) / 2
+                    : $settings['edgeSpacing'];
+                $canvas->text($x, $y, $label, $font, $fontSize, $numberColor);
+            });
         }
 
         // Allow callers to stream or download.

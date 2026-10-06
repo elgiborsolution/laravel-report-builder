@@ -37,6 +37,19 @@ abstract class TestCase extends BaseTestCase
             'prefix' => '',
         ]);
 
+        // Keep compiled Blade output on a writable test path. The package
+        // checkout may be read-only when tests run through the host app's vendor tree.
+        $compiledViews = sys_get_temp_dir().DIRECTORY_SEPARATOR.'advanced-reports-test-views';
+        if (! is_dir($compiledViews)) {
+            mkdir($compiledViews, 0777, true);
+        }
+        $app['config']->set('view.compiled', $compiledViews);
+        $excelTemp = sys_get_temp_dir().DIRECTORY_SEPARATOR.'advanced-reports-excel';
+        if (! is_dir($excelTemp)) {
+            mkdir($excelTemp, 0777, true);
+        }
+        $app['config']->set('excel.temporary_files.local_path', $excelTemp);
+
         // Disable permission enforcement by default so unit tests can run without auth.
         $app['config']->set('advanced-reports.security.enforce_permissions', false);
         $app['config']->set('advanced-reports.routes.api.enabled', true);

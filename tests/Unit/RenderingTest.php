@@ -222,12 +222,31 @@ it('exports configured report headers and footers without replacing column or ag
             'groups' => [['field' => 'customer_name', 'label' => 'Customer']],
             'aggregates' => [['field' => 'total_amount', 'function' => 'sum', 'label' => 'Amount total']],
             'layout' => [
+                'title' => 'Quarterly Sales',
+                'subtitle' => 'Q3 operating performance',
+                'description' => 'Layout-provided summary',
+                'showReportInfo' => true,
+                'reportInfoStyle' => [
+                    'alignment' => 'center', 'fontFamily' => 'Times New Roman', 'fontSize' => 12, 'fontSizeUnit' => 'pt',
+                    'bold' => true, 'italic' => true, 'underline' => true, 'textColor' => '#123456',
+                    'backgroundColor' => '#eeeeff', 'spacing' => 14,
+                ],
                 'headerText' => 'Sales & Service',
                 'footerText' => 'Confidential',
                 'pageSize' => 'letter',
                 'orientation' => 'landscape',
                 'showPageNumbers' => true,
                 'showBorders' => true,
+                'headerStyle' => [
+                    'alignment' => 'center', 'fontFamily' => 'Arial', 'fontSize' => 12, 'fontSizeUnit' => 'px',
+                    'bold' => true, 'italic' => true, 'underline' => true, 'textColor' => '#123456',
+                    'backgroundColor' => '#eeeeff', 'padding' => 5, 'paddingUnit' => 'px',
+                    'borderStyle' => 'dashed', 'borderColor' => '#abcdef', 'borderWidth' => 1, 'borderWidthUnit' => 'px',
+                ],
+                'footerStyle' => [
+                    'alignment' => 'right', 'fontFamily' => 'Times New Roman', 'fontSize' => 10, 'fontSizeUnit' => 'pt',
+                    'italic' => true, 'textColor' => '#654321', 'borderStyle' => 'solid',
+                ],
             ],
         ],
         'is_active' => true,
@@ -240,7 +259,13 @@ it('exports configured report headers and footers without replacing column or ag
 
     expect($html)
         ->toContain('Sales &amp; Service')
+        ->toContain('Quarterly Sales')
+        ->toContain('Q3 operating performance')
+        ->toContain('Layout-provided summary')
+        ->toContain('text-align: center; font-family: Times New Roman, serif; font-size: 12pt; font-weight: bold; font-style: italic; text-decoration: underline; color: #123456; background-color: #eeeeff; margin-bottom: 14pt')
         ->toContain('Confidential')
+        ->toContain('text-align: center; font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: bold; font-style: italic; text-decoration: underline; color: #123456; background-color: #eeeeff; padding: 5px; border: 1px dashed #abcdef')
+        ->toContain('text-align: right; font-family: Times New Roman, serif; font-size: 10pt; font-weight: normal; font-style: italic; text-decoration: none; color: #654321')
         ->toContain('<th>Order</th>')
         ->toContain('Grand total');
 
@@ -260,8 +285,13 @@ it('exports configured report headers and footers without replacing column or ag
         ->toMatchArray(['paper' => 'letter', 'orientation' => 'landscape', 'show_page_numbers' => true])
         ->and($pdfOutput['html'])
         ->toContain('Sales &amp; Service')
+        ->toContain('Quarterly Sales')
+        ->toContain('Q3 operating performance')
+        ->toContain('Layout-provided summary')
         ->toContain('Confidential')
-        ->toContain('report-page-number')
+        ->toContain('background-color: #eeeeff')
+        ->toContain('border: 1px dashed #abcdef')
+        ->toContain('@page { margin:')
         ->toContain('display: table-header-group')
         ->toContain('display: table-row-group')
         ->toContain('<th>Order</th>')
@@ -285,6 +315,8 @@ it('exports configured report headers and footers without replacing column or ag
     );
     $grandTotalIndex = array_search('Grand total', array_map(static fn (array $row) => $row[0] ?? null, $csvRows), true);
 
+    expect(substr_count($pdfOutput['html'], 'Quarterly Sales'))->toBe(1);
+
     expect($csvRows[0])->toBe(['Sales & Service', ''])
         ->and($csvRows[1])->toBe(['Order', 'Amount'])
         ->and($grandTotalIndex)->toBeInt()
@@ -305,15 +337,94 @@ it('exports configured report headers and footers without replacing column or ag
         $sheet = $workbook->getActiveSheet();
         $pageSetup = $sheet->getPageSetup();
 
-        expect($sheet->getCell('A1')->getValue())->toBe('Order')
-            ->and($sheet->getHeaderFooter()->getOddHeader())->toBe('&LSales && Service')
-            ->and($sheet->getHeaderFooter()->getOddFooter())->toBe('&LConfidential&RPage &P of &N')
+        expect($sheet->getCell('A1')->getValue())->toBe('Quarterly Sales')
+            ->and($sheet->getCell('A2')->getValue())->toBe('Q3 operating performance')
+            ->and($sheet->getCell('A3')->getValue())->toBe('Layout-provided summary')
+            ->and($sheet->getCell('A4')->getValue())->toBeNull()
+            ->and($sheet->getCell('A5')->getValue())->toBe('Order')
+            ->and($sheet->getStyle('A1')->getFont()->getName())->toBe('Times New Roman')
+            ->and($sheet->getStyle('A1')->getFont()->getSize())->toBe(12.0)
+            ->and($sheet->getStyle('A1')->getFont()->getBold())->toBeTrue()
+            ->and($sheet->getStyle('A1')->getFont()->getItalic())->toBeTrue()
+            ->and($sheet->getStyle('A1')->getFont()->getUnderline())->toBe('single')
+            ->and($sheet->getStyle('A1')->getFont()->getColor()->getARGB())->toBe('FF123456')
+            ->and($sheet->getStyle('A1')->getFill()->getStartColor()->getARGB())->toBe('FFEEEEFF')
+            ->and($sheet->getStyle('A1')->getAlignment()->getHorizontal())->toBe(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+            ->and($sheet->getStyle('A1')->getBorders()->getLeft()->getBorderStyle())->toBe(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_NONE)
+            ->and($sheet->getStyle('A4')->getBorders()->getBottom()->getBorderStyle())->toBe(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_NONE)
+            ->and($sheet->getHeaderFooter()->getOddHeader())->toBe('&L&C&"Arial,Bold Italic"&9&U&K123456Sales && Service&R')
+            ->and($sheet->getHeaderFooter()->getOddFooter())->toContain('Page &P of &N')
+            ->and($sheet->getHeaderFooter()->getOddFooter())->toContain('Confidential')
+            ->and($sheet->getHeaderFooter()->getOddFooter())->not->toContain("\n")
             ->and($pageSetup->getPaperSize())->toBe(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_LETTER)
             ->and($pageSetup->getOrientation())->toBe(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE)
-            ->and($pageSetup->getRowsToRepeatAtTop())->toBe(['1', '1'])
-            ->and($sheet->getStyle('A1')->getBorders()->getLeft()->getBorderStyle())->toBe(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
+            ->and($pageSetup->getRowsToRepeatAtTop())->toBe(['5', '5'])
+            ->and($sheet->getStyle('A5')->getBorders()->getLeft()->getBorderStyle())->toBe(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
             ->and(collect($excel->collection())->flatten()->contains('Grand total'))->toBeTrue();
 
+        foreach (['A1', 'B1', 'A2', 'B2', 'A4', 'B4'] as $infoCell) {
+            $borders = $sheet->getStyle($infoCell)->getBorders();
+            expect([
+                $borders->getTop()->getBorderStyle(),
+                $borders->getBottom()->getBorderStyle(),
+                $borders->getLeft()->getBorderStyle(),
+                $borders->getRight()->getBorderStyle(),
+            ])->toBe([
+                \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_NONE,
+                \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_NONE,
+                \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_NONE,
+                \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_NONE,
+            ]);
+        }
+
+        $workbook->disconnectWorksheets();
+    } finally {
+        @unlink($path);
+    }
+});
+
+it('hides Report Info in HTML and Excel while retaining the table header when disabled', function () {
+    \ElgiborSolution\AdvancedReports\Models\Report::create([
+        'name' => 'Hidden Report Info',
+        'code' => 'hidden_report_info',
+        'data_source' => 'sales_orders',
+        'definition' => [
+            'name' => 'Hidden Report Info',
+            'data_source' => 'sales_orders',
+            'parameters' => [
+                ['name' => 'date_from', 'default' => '2026-01-01'],
+                ['name' => 'date_to', 'default' => '2026-12-31'],
+            ],
+            'columns' => [['field' => 'order_number', 'label' => 'Order']],
+            'layout' => [
+                'title' => 'Must not display',
+                'showReportInfo' => false,
+                'reportInfoStyle' => ['bold' => true, 'backgroundColor' => '#ffeecc'],
+            ],
+        ],
+        'is_active' => true,
+        'is_public' => true,
+    ]);
+
+    $result = AdvancedReports::run('hidden_report_info');
+    $html = app(HtmlRenderer::class)->render($result);
+    expect($html)->not->toContain('<section class="report-info')
+        ->and($html)->toContain('<th>Order</th>');
+
+    $excel = app(\ElgiborSolution\AdvancedReports\Renderers\ExcelRenderer::class);
+    $resultProperty = new ReflectionProperty($excel, 'result');
+    $resultProperty->setAccessible(true);
+    $resultProperty->setValue($excel, $result);
+    app()->register(\Maatwebsite\Excel\ExcelServiceProvider::class);
+    $xlsx = \Maatwebsite\Excel\Facades\Excel::raw($excel, \Maatwebsite\Excel\Excel::XLSX);
+    $path = tempnam(sys_get_temp_dir(), 'report-info-hidden-');
+    file_put_contents($path, $xlsx);
+
+    try {
+        $workbook = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+        $sheet = $workbook->getActiveSheet();
+        expect($sheet->getCell('A1')->getValue())->toBe('Order')
+            ->and($sheet->getPageSetup()->getRowsToRepeatAtTop())->toBe(['1', '1']);
         $workbook->disconnectWorksheets();
     } finally {
         @unlink($path);

@@ -29,11 +29,26 @@ beforeEach(function () {
         'conditional_formatting' => [['field' => 'total_amount', 'operator' => '>', 'value' => 0, 'style' => ['color' => '#123456']]],
         'layout' => [
             'title' => 'Saved layout',
+            'subtitle' => 'Saved subtitle',
+            'description' => 'Saved report details',
+            'showReportInfo' => false,
+            'reportInfoStyle' => [
+                'alignment' => 'right', 'fontFamily' => 'Courier New', 'fontSize' => 13, 'fontSizeUnit' => 'pt',
+                'bold' => true, 'italic' => true, 'underline' => true, 'textColor' => '#112233',
+                'backgroundColor' => '#eeeeff', 'spacing' => 18,
+            ],
             'headerText' => 'Quarterly overview',
             'footerText' => 'Internal use only',
             'pageSize' => 'a4',
             'orientation' => 'landscape',
             'showPageNumbers' => true,
+            'headerStyle' => [
+                'alignment' => 'center', 'fontFamily' => 'Helvetica', 'fontSize' => 12, 'fontSizeUnit' => 'px',
+                'bold' => true, 'textColor' => '#123456', 'backgroundColor' => '#eeeeee',
+                'padding' => 4, 'paddingUnit' => 'pt', 'borderStyle' => 'solid', 'borderColor' => '#abcdef',
+                'borderWidth' => 0.5, 'borderWidthUnit' => 'pt',
+            ],
+            'footerStyle' => ['alignment' => 'right', 'italic' => true, 'underline' => true],
         ],
         'meta' => ['application_tag' => 'keep'],
     ];
@@ -51,6 +66,14 @@ it('persists the full frontend update definition and reloads it for saved previe
         ->assertJsonPath('data.definition.data_source', 'sales_orders')
         ->assertJsonPath('data.definition.layout.headerText', 'Quarterly overview')
         ->assertJsonPath('data.definition.layout.footerText', 'Internal use only')
+        ->assertJsonPath('data.definition.layout.headerStyle.alignment', 'center')
+        ->assertJsonPath('data.definition.layout.headerStyle.fontSizeUnit', 'px')
+        ->assertJsonPath('data.definition.layout.footerStyle.underline', true)
+        ->assertJsonPath('data.definition.layout.showReportInfo', false)
+        ->assertJsonPath('data.definition.layout.reportInfoStyle.alignment', 'right')
+        ->assertJsonPath('data.definition.layout.reportInfoStyle.fontSizeUnit', 'pt')
+        ->assertJsonPath('data.definition.layout.reportInfoStyle.backgroundColor', '#eeeeff')
+        ->assertJsonPath('data.definition.layout.reportInfoStyle.spacing', 18)
         ->assertJsonPath('data.definition.layout.orientation', 'landscape');
     $this->postJson($this->url.'/preview', ['parameters' => ['id' => null]])
         ->assertOk()->assertJsonCount(3, 'rows')->assertJsonPath('presentation_rows.0.type', 'group_header');

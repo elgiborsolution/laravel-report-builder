@@ -9,6 +9,7 @@ use ElgiborSolution\AdvancedReports\Engine\DrilldownResolver;
 use ElgiborSolution\AdvancedReports\Engine\ReportResult;
 use ElgiborSolution\AdvancedReports\Support\Formatter;
 use ElgiborSolution\AdvancedReports\Support\PresentationTableRows;
+use ElgiborSolution\AdvancedReports\Support\ReportInfoSettings;
 use ElgiborSolution\AdvancedReports\Support\SummaryRowLayout;
 use ElgiborSolution\AdvancedReports\Support\ValueResolver;
 
@@ -56,7 +57,9 @@ final class HtmlRenderer implements ReportRenderer
             'parameters' => $result->parameters,
             'metadata' => $result->metadata,
             'layout' => $result->layout,
+            'reportInfo' => ReportInfoSettings::resolve($result),
             'pdfMode' => (bool) ($options['pdf_mode'] ?? false),
+            'pageGeometry' => $options['page_geometry'] ?? null,
         ])->render();
     }
 
